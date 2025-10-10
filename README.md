@@ -1,8 +1,7 @@
 # Centaur - Open Source Web Application Firewall on Rust (Pingora + ModSecurity SecRule + Hot Reload)
+Production-ready WAF example on Rust using Pingora with ModSecurity rules (SecRule) support.
 
-Production-ready пример WAF на Rust с использованием Pingora и поддержкой правил ModSecurity (`SecRule`).
-
-## Возможности
+## Features
 - Поддержка `.conf` правил (`SecRule`)
 - Actions: `id`, `phase`, `deny`, `msg`, `status`
 - Hot reload правил:
@@ -10,7 +9,7 @@ Production-ready пример WAF на Rust с использованием Ping
   - по HTTP `POST /reload`
 - Настройка через файл конфиг toml
 
-## Запуск
+## Quick Start
 ```bash
 cargo run
 ```
@@ -18,11 +17,11 @@ cargo run
 Reload:
 ```bash
 curl -X POST http://127.0.0.1:8081/reload
-# или
+# or
 kill -HUP $(pgrep rust-waf-pingora-secrule-reload)
 ```
 
-# Тест
+## Testing
 ```bash
 1. cargo run
 2. python3 -m http.server 8888 
