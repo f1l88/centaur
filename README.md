@@ -1,5 +1,4 @@
-Centaur - Open Source Web Application Firewall on Rust
-# Rust WAF Proxy (Pingora + ModSecurity SecRule + Hot Reload)
+# Centaur - Open Source Web Application Firewall on Rust (Pingora + ModSecurity SecRule + Hot Reload)
 
 Production-ready пример WAF на Rust с использованием Pingora и поддержкой правил ModSecurity (`SecRule`).
 
