@@ -20,8 +20,8 @@ A high-performance Web Application Firewall (WAF) proxy built with **Rust** and 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Rust 1.70+
-- Cargo
+- Rust 1.90+
+- cargo 1.90.0
 
 ### Project Structure
 centaur/
