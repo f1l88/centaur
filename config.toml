@@ -1,0 +1,7 @@
+[server]
+proxy_port = 6188
+
+[upstream]
+address = "127.0.0.1:8888"
+use_tls = false
+sni = "localhost"
