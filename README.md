@@ -1,4 +1,4 @@
-# 🛡️ Centaur - Rust WAF Proxy (Open Source Web Application Firewall on Rust (Pingora + ModSecurity SecRule + Hot Reload))
+# 🏹 Centaur - Rust WAF Proxy (Open Source Web Application Firewall on Rust (Pingora + ModSecurity SecRule + Hot Reload))
 
 ![Rust](https://img.shields.io/badge/Rust-1.70+-orange?logo=rust)
 ![License](https://img.shields.io/badge/License-MIT-blue)
