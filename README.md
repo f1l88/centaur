@@ -1,13 +1,55 @@
-# Centaur - Open Source Web Application Firewall on Rust (Pingora + ModSecurity SecRule + Hot Reload)
-Production-ready WAF example on Rust using Pingora with ModSecurity rules (SecRule) support.
+# 🛡️ Centaur - Rust WAF Proxy (Open Source Web Application Firewall on Rust (Pingora + ModSecurity SecRule + Hot Reload))
 
-## Features
-- Поддержка `.conf` правил (`SecRule`)
-- Actions: `id`, `phase`, `deny`, `msg`, `status`
-- Hot reload правил:
-  - по сигналу `SIGHUP`
-  - по HTTP `POST /reload`
-- Настройка через файл конфиг toml
+![Rust](https://img.shields.io/badge/Rust-1.70+-orange?logo=rust)
+![License](https://img.shields.io/badge/License-MIT-blue)
+![Pingora](https://img.shields.io/badge/Powered_by-Pingora-green)
+
+A high-performance Web Application Firewall (WAF) proxy built with **Rust** and **Pingora**, featuring ModSecurity rule support and hot-reload capabilities.
+
+## ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| **🔒 Security** | ModSecurity-style rule support |
+| **⚡ Performance** | Built on Pingora for high-throughput |
+| **🔄 Hot Reload** | Rule updates without downtime |
+| **📝 Rule Support** | Full SecRule syntax compatibility |
+| **🔧 Configurable** | TOML-based configuration |
+| **📊 Admin API** | HTTP API for management |
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Rust 1.70+
+- Cargo
+
+### Project Structure
+centaur/
+├── src/
+│   ├── main.rs          # Main application
+│   ├── lib.rs           # Main application
+│   └── waf/             # WAF engine
+│       ├── mod.rs       # WAF module
+│       ├── parser.rs    # Rule parser
+│       └── reloader.rs  # Hot reload logic
+├── rules/
+│   └── example.conf     # WAF rules
+├── config.toml          # Configuration
+├── Cargo.toml
+└── README.md
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/f1l88/centaur.git
+cd centaur
+
+# Build the project
+cargo build --release
+
+# Run the proxy
+cargo run --release
 
 ## Quick Start
 ```bash
