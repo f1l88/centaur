@@ -5,12 +5,10 @@ use pingora::upstreams::peer::HttpPeer;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
-use crate::waf::Engine;
-use crate::waf::reloader::SharedWaf;
+use centaur_core::waf::Engine;
+use centaur_core::waf::reloader::SharedWaf;
 
 use serde::Deserialize;
-
-mod waf;
 
 struct MyProxy {
     waf: Arc<SharedWaf>,
@@ -37,14 +35,15 @@ struct UpstreamConfig {
 
 impl Config {
     fn load() -> Self {
-        let config_str = std::fs::read_to_string("config.toml")
+        let config_path = format!("{}/config.toml", env!("CARGO_MANIFEST_DIR"));
+        let config_str = std::fs::read_to_string(&config_path)
+        //let config_str = std::fs::read_to_string("../config.toml")
             .expect("Failed to read config.toml");
         toml::from_str(&config_str)
             .expect("Failed to parse config.toml")
     }
 }
 
-// ⭐ ДОБАВЬТЕ ЭТУ РЕАЛИЗАЦИЮ
 impl MyProxy {
     fn from_config(waf: Arc<SharedWaf>) -> Self {
         let config = Config::load();
@@ -90,8 +89,9 @@ fn main() {
     // Загружаем конфигурацию
     let config = Config::load();
     // Убираем async и используем блокирующую версию для загрузки WAF
-    let rules_path = "rules/example.conf";
-    let engine = Engine::load(rules_path).expect("Failed to load rules");
+    let rules_path = format!("{}/rules/example.conf", env!("CARGO_MANIFEST_DIR"));
+    //let engine = load_rules_from_file(&rules_path)
+    let engine = Engine::load(&rules_path).expect("Failed to load rules");
     let shared_waf = Arc::new(SharedWaf::new(engine, rules_path));
 
     // Запускаем SIGHUP watcher в отдельном потоке (не async)
@@ -118,7 +118,6 @@ fn main() {
     //let mut proxy_service = http_proxy_service(&server.configuration, MyProxy { waf: shared_waf.clone(), config: from_config() });
     //proxy_service.add_tcp("127.0.0.1:6188"); // ← ДОБАВЬТЕ ЭТУ СТРОКУ
 
-    // Используем порт из конфига
     // Используем порт из конфига
     let proxy_addr = format!("127.0.0.1:{}", config.server.proxy_port);
     proxy_service.add_tcp(&proxy_addr);

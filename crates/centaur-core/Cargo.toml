@@ -1,0 +1,26 @@
+[package]
+name = "centaur-core"
+version = "0.1.0"
+edition = "2021"
+description = "Centaur WAF core: rules parser and inspection engine"
+license = "MIT OR Apache-2.0"
+authors = ["alexey.filatov.1988@google.com>"]
+
+[lib]
+name = "centaur_core"
+path = "src/lib.rs"
+
+[dependencies]
+pingora = { version = "0.6", features = ["proxy"] }
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+hyper = { version = "0.14", features = ["full"] }
+regex = "1.11.3"
+anyhow = "1.0.100"
+serde = "1.0.228"
+toml = "0.9.8"
+pingora-core = "0.6.0"
+
+#[features]
+#default = ["async"]
+#async = ["tokio"]

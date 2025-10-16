@@ -1,0 +1,16 @@
+[package]
+name = "centaur-cli"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+pingora = { version = "0.6", features = ["proxy"] }
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+hyper = { version = "0.14", features = ["full"] }
+regex = "1.11.3"
+anyhow = "1.0.100"
+serde = "1.0.228"
+toml = "0.9.8"
+pingora-core = "0.6.0"
+centaur-core = { path = "../centaur-core" }
