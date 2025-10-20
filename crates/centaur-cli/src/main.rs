@@ -77,17 +77,68 @@ impl ProxyHttp for MyProxy {
         session: &mut Session,
         _ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
-        let headers = &session.req_header().headers;
+        let headers = session.req_header();
 
-        let allowed = {
-            let waf_guard = self.waf.inner.read().expect("WAF lock poisoned");
-            waf_guard.check(&headers)
-        };
+        let client_ip = session
+            .client_addr()
+            .map(|addr| addr.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
 
-        if !allowed {
+        let method = headers.method.as_str();
+        let uri = headers.uri.to_string();
+
+        // Детальная проверка WAF
+        let waf_result = self.waf.check_detailed(&headers.headers, &uri);
+
+        // Детальное логирование WAF
+        println!("WAF проверка: {} {} от {}", method, uri, client_ip);
+        println!(
+            "   {} Статус: {}",
+            if waf_result.allowed { "✅" } else { "🚫" },
+            if waf_result.allowed {
+                "РАЗРЕШЕНО"
+            } else {
+                "ЗАБЛОКИРОВАНО"
+            }
+        );
+        println!("   📋 Причина: {}", waf_result.reason);
+
+        if let Some(rule) = &waf_result.matched_rule {
+            println!("ID правила: {}", rule.id);
+            println!("Переменная: {}", rule.variable);
+            println!("Оператор: {}", rule.operator);
+            println!("Аргумент: {}", rule.argument);
+
+            // Логируем действия правила
+            if !rule.actions.is_empty() {
+                let actions: Vec<String> = rule.actions.keys().cloned().collect();
+                println!("Действия: {}", actions.join(", "));
+            }
+        }
+
+        if let Some(header_name) = &waf_result.header_name {
+            if let Some(header_value) = &waf_result.header_value {
+                // Обрезаем длинные значения для читаемости
+                let display_value = if header_value.len() > 100 {
+                    format!("{}...", &header_value[..100])
+                } else {
+                    header_value.clone()
+                };
+                println!("Заголовок: {} = \"{}\"", header_name, display_value);
+            }
+        }
+
+        if !waf_result.allowed {
+            println!(
+                "WAF БЛОКИРОВКА: Запрос {} {} заблокирован по правилу ID {}",
+                method, uri, waf_result.rule_id
+            );
             session.respond_error(403).await?;
             return Ok(true);
         }
+
+        println!("WAF РАЗРЕШЕНИЕ: {} {} пропущен", method, uri);
+        println!("---"); // разделитель для читаемости
         Ok(false)
     }
 }
@@ -100,6 +151,9 @@ fn main() {
     //let engine = load_rules_from_file(&rules_path)
     let engine = Engine::load(&rules_path).expect("Failed to load rules");
     let shared_waf = Arc::new(SharedWaf::new(engine, rules_path));
+
+    // Выводим информацию о загруженных правилах
+    println!("{}", shared_waf.get_rules_info());
 
     // Запускаем SIGHUP watcher в отдельном потоке (не async)
     let sighup_waf = shared_waf.clone();
@@ -130,8 +184,8 @@ fn main() {
     // Используем порт из конфига
     let proxy_addr = format!("127.0.0.1:{}", config.server.proxy_port);
     proxy_service.add_tcp(&proxy_addr);
-
     server.add_service(proxy_service);
+
     println!("Proxy Pingora running on http://{}", proxy_addr);
 
     //server.add_service(http_proxy_service(&server.configuration, MyProxy { waf: shared_waf.clone() }));
@@ -149,25 +203,44 @@ fn main() {
                 async move {
                     Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
                         let waf = waf.clone();
-                        async move {
-                            if req.uri().path() == "/reload" {
-                                match waf.reload_now() {
-                                    Ok(_) => Ok::<_, hyper::Error>(
+                        async move {                            match req.uri().path() {
+                            "/reload" => {
+                                    match waf.reload_now() {
+                                        Ok(_) => Ok::<_, hyper::Error>(
+                                            Response::builder()
+                                                .status(200)
+                                                .body(Body::from("✅ Rules reloaded successfully"))
+                                                .unwrap(),
+                                        ),
+                                        Err(e) => Ok(Response::builder()
+                                            .status(500)
+                                            .body(Body::from(format!("❌ Reload failed: {e}")))
+                                            .unwrap()),
+                                    }
+                                }
+                                "/stats" => {
+                                    let rules_info = waf.get_rules_info();
+                                    Ok::<_, hyper::Error>(
                                         Response::builder()
                                             .status(200)
-                                            .body(Body::from("Reloaded successfully"))
+                                            .body(Body::from(rules_info))
                                             .unwrap(),
-                                    ),
-                                    Err(e) => Ok(Response::builder()
-                                        .status(500)
-                                        .body(Body::from(format!("Reload failed: {e}")))
-                                        .unwrap()),
+                                    )
                                 }
-                            } else {
-                                Ok(Response::builder()
-                                    .status(404)
-                                    .body(Body::from("Not Found"))
-                                    .unwrap())
+                                "/health" => {
+                                    Ok::<_, hyper::Error>(
+                                        Response::builder()
+                                            .status(200)
+                                            .body(Body::from("🟢 WAF is healthy"))
+                                            .unwrap(),
+                                    )
+                                }
+                                _ => {
+                                    Ok(Response::builder()
+                                        .status(404)
+                                        .body(Body::from("❌ Endpoint not found. Available: /reload, /stats, /health"))
+                                        .unwrap())
+                                }
                             }
                         }
                     }))
@@ -177,7 +250,12 @@ fn main() {
             let addr = SocketAddr::from(([127, 0, 0, 1], 8081));
             let server = HyperServer::bind(&addr).serve(make_svc);
 
-            println!("Admin API listening on http://{}", addr);
+            println!("🔧 Admin API listening on http://{}", addr);
+            println!("   Available endpoints:");
+            println!("   - GET /reload  - Reload WAF rules");
+            println!("   - GET /stats   - Show rules statistics");
+            println!("   - GET /health  - Health check");
+
             if let Err(e) = server.await {
                 eprintln!("Admin server error: {}", e);
             }
