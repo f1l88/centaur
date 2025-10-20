@@ -1,7 +1,14 @@
 [server]
 proxy_port = 6188
 
-[upstream]
+[[upstream]]
+name = "site1"
 address = "127.0.0.1:8888"
+use_tls = false
+sni = "localhost"
+
+[[upstream]]
+name = "site1"
+address = "127.0.0.1:8887"
 use_tls = false
 sni = "localhost"

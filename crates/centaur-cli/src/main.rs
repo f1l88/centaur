@@ -18,7 +18,7 @@ struct MyProxy {
 #[derive(Deserialize)]
 struct Config {
     server: ServerConfig,
-    upstream: UpstreamConfig,
+    upstream: Vec<UpstreamConfig>,
 }
 
 #[derive(Deserialize)]
@@ -28,6 +28,7 @@ struct ServerConfig {
 
 #[derive(Deserialize, Clone)]
 struct UpstreamConfig {
+    name: String,
     address: String,
     use_tls: bool,
     sni: String,
@@ -64,10 +65,44 @@ impl ProxyHttp for MyProxy {
         _session: &mut Session,
         _ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
+        // Получаем Host header
+        let host_header = _session
+            .req_header()
+            .headers
+            .get("host")
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("")
+            .to_lowercase();
+
+        // Ищем upstream по точному совпадению имени
+        let upstream = self
+            .config
+            .upstream
+            .iter()
+            .find(|u| host_header == u.name.to_lowercase())
+            .or_else(|| {
+                // Ищем по частичному совпадению (например: api.example.com -> api)
+                self.config
+                    .upstream
+                    .iter()
+                    .find(|u| host_header.contains(&u.name.to_lowercase()))
+            })
+            .or_else(|| {
+                // Используем upstream с именем "default"
+                self.config.upstream.iter().find(|u| u.name == "default")
+            })
+            .or_else(|| self.config.upstream.first())
+            .expect("No upstream configured");
+
+        println!(
+            "   🔀 Маршрутизация: {} -> {} ({})",
+            host_header, upstream.name, upstream.address
+        );
+
         let peer = HttpPeer::new(
-            self.config.upstream.address.clone(),
-            self.config.upstream.use_tls,
-            self.config.upstream.sni.clone(), // клонируем sni
+            upstream.address.clone(),
+            upstream.use_tls,
+            upstream.sni.clone(),
         );
         Ok(Box::new(peer))
     }
@@ -86,15 +121,22 @@ impl ProxyHttp for MyProxy {
 
         let method = headers.method.as_str();
         let uri = headers.uri.to_string();
+        let host = headers
+            .headers
+            .get("host")
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("unknown");
 
         // Детальная проверка WAF
         let waf_result = self.waf.check_detailed(&headers.headers, &uri);
 
         // Детальное логирование WAF
-        println!("WAF проверка: {} {} от {}", method, uri, client_ip);
         println!(
-            "   {} Статус: {}",
-            if waf_result.allowed { "✅" } else { "🚫" },
+            "WAF проверка: {} {} (Host: {}) от {}",
+            method, uri, host, client_ip
+        );
+        println!(
+            "Статус: {}",
             if waf_result.allowed {
                 "РАЗРЕШЕНО"
             } else {
@@ -152,8 +194,15 @@ fn main() {
     let engine = Engine::load(&rules_path).expect("Failed to load rules");
     let shared_waf = Arc::new(SharedWaf::new(engine, rules_path));
 
-    // Выводим информацию о загруженных правилах
+    // Выводим информацию о загруженных правилах и upstream'ах
     println!("{}", shared_waf.get_rules_info());
+    println!("🔄 Настроено upstream серверов: {}", config.upstream.len());
+    for upstream in &config.upstream {
+        println!(
+            "   • {} -> {} (TLS: {}, SNI: {})",
+            upstream.name, upstream.address, upstream.use_tls, upstream.sni
+        );
+    }
 
     // Запускаем SIGHUP watcher в отдельном потоке (не async)
     let sighup_waf = shared_waf.clone();
@@ -177,9 +226,6 @@ fn main() {
         &server.configuration,
         MyProxy::from_config(shared_waf.clone()),
     );
-    // Создаем прокси сервис и ЯВНО указываем порт
-    //let mut proxy_service = http_proxy_service(&server.configuration, MyProxy { waf: shared_waf.clone(), config: from_config() });
-    //proxy_service.add_tcp("127.0.0.1:6188"); // ← ДОБАВЬТЕ ЭТУ СТРОКУ
 
     // Используем порт из конфига
     let proxy_addr = format!("127.0.0.1:{}", config.server.proxy_port);
@@ -209,7 +255,7 @@ fn main() {
                                         Ok(_) => Ok::<_, hyper::Error>(
                                             Response::builder()
                                                 .status(200)
-                                                .body(Body::from("✅ Rules reloaded successfully"))
+                                                .body(Body::from("Rules reloaded successfully"))
                                                 .unwrap(),
                                         ),
                                         Err(e) => Ok(Response::builder()
@@ -231,7 +277,7 @@ fn main() {
                                     Ok::<_, hyper::Error>(
                                         Response::builder()
                                             .status(200)
-                                            .body(Body::from("🟢 WAF is healthy"))
+                                            .body(Body::from("WAF is healthy"))
                                             .unwrap(),
                                     )
                                 }
