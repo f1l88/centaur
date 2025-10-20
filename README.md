@@ -49,7 +49,7 @@ cd centaur
 cargo build --release
 
 # Run the proxy
-cargo run --release
+cargo run -p centaur-cli
 
 ## Quick Start
 ```bash
@@ -66,7 +66,7 @@ kill -HUP $(pgrep rust-waf-pingora-secrule-reload)
 ## Testing
 ```bash
 1. cargo run
-2. python3 -m http.server 8888 
+2. python3 -m http.server 8888
 3. curl -v -H "User-Agent: Mozilla/5.0 Chrome" http://127.0.0.1:6188/ - Allow
 4. curl -v -H "User-Agent: BadBot" http://localhost:6188/ - Block
 ```
