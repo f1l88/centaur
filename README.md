@@ -51,9 +51,6 @@ cargo build --release
 # Run the proxy
 cargo run -p centaur-cli
 
-## Quick Start
-```bash
-cargo run
 ```
 
 Reload:
