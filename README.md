@@ -40,8 +40,11 @@ centaur/
 
 ### Installation ModSecurity
 ```bash
-git clone --recursive https://github.com/owasp-modsecurity/ModSecurity ModSecurity
-cd ModSecurity
+git clone --depth 1 -b v3/master --single-branch https://github.com/SpiderLabs/ModSecurity /usr/local/src/ModSecurity/
+cd /usr/local/src/ModSecurity/
+sudo apt install gcc make build-essential autoconf automake libtool libcurl4-openssl-dev liblua5.3-dev libfuzzy-dev ssdeep gettext pkg-config libpcre3 libpcre3-dev libxml2 libxml2-dev libcurl4 libgeoip-dev libyajl-dev doxygen libpcre2-16-0 libpcre2-dev libpcre2-posix3 -y
+git submodule init
+git submodule update
 ./build.sh
 ./configure
 make
