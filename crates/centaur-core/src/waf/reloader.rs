@@ -33,7 +33,7 @@ impl SharedWaf {
     }
 
     // ... остальные методы остаются без изменений
-    pub async fn watch_sighup(self) {
+    pub async fn watch_sighup(&self) {
         let mut stream = signal(SignalKind::hangup()).expect("failed to setup SIGHUP listener");
         println!("🔭 Начато отслеживание SIGHUP для перезагрузки правил WAF");
 
