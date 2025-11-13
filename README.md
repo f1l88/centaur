@@ -38,8 +38,20 @@ centaur/
 ├── Cargo.toml
 └── README.md
 
-### Installation
+### Installation ModSecurity
+```bash
+git clone --recursive https://github.com/owasp-modsecurity/ModSecurity ModSecurity
+cd ModSecurity
+./build.sh
+./configure
+make
+make install
+export PKG_CONFIG_PATH=/usr/local/modsecurity/lib/pkgconfig:$PKG_CONFIG_PATH
+export LD_LIBRARY_PATH=/usr/local/modsecurity/lib:$LD_LIBRARY_PATH
 
+```
+
+### Installation Centaur WAF
 ```bash
 # Clone the repository
 git clone https://github.com/f1l88/centaur.git
