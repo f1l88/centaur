@@ -14,3 +14,5 @@ serde = "1.0.228"
 toml = "0.9.8"
 pingora-core = "0.6.0"
 centaur-core = { path = "../centaur-core" }
+tracing-subscriber = "0.3.22"
+tracing = "0.1.43"

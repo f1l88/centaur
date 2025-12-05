@@ -82,13 +82,5 @@ kill -HUP $(pgrep rust-waf-pingora-secrule-reload)
 3. curl -v -H "User-Agent: Mozilla/5.0 Chrome" http://127.0.0.1:6188/ - Allow
 4. curl -v -H "User-Agent: BadBot" http://localhost:6188/ - Block
 5. curl -v -H "User-Agent: Mozilla/5.0 Chrome" http://127.0.0.1:6188/admin - Block
-6. curl -v -H "X-Client-Port: 22" -H "User-Agent: Test" http://127.0.0.1:6188/ - Block
-```
-
-## Perform testing
-```bash
-sudo apt install wrk  # Ubuntu/Debian
-
-# Базовый тест
-wrk -t12 -c100 -d30s -H "X-Client-Port: 22" http://localhost:6188
+6. curl -v -H "User-Agent: Mozilla/5.0 Chrome" -H "Host: example.com" http://127.0.0.1:6188/
 ```

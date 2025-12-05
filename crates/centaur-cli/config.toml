@@ -1,26 +1,35 @@
 [server]
 proxy_port = 6188
+admin_port = 9000
 
 [[upstream]]
-name = "api-backend"
-address = "0.0.0.0:3000"
+name = "api"
+address = "127.0.0.1:8080"
 use_tls = false
 sni = "api.example.com"
-waf_rules = "api.conf"  # Специфичные правила для API
-waf_mode = "strict"     # Режим WAF
+waf_rules = "api.conf"
+waf_mode = "blocking"
 
 [[upstream]]
-name = "web-backend"
-address = "127.0.0.1:8083"
-use_tls = false
-sni = "www.example.com"
-waf_rules = "web.conf"  # Правила для веб-сайта
-waf_mode = "moderate"
-
-[[upstream]]
-name = "admin-backend"
+name = "web"
 address = "127.0.0.1:8888"
-use_tls = false  
+use_tls = false
+sni = "web.example.com"
+waf_rules = "web.conf"
+waf_mode = "blocking"
+
+[[upstream]]
+name = "admin"
+address = "127.0.0.1:8082"
+use_tls = false
 sni = "admin.example.com"
-waf_rules = "admin.conf"  # Строгие правила для админки
-waf_mode = "paranoid"
+waf_rules = "admin.conf"
+waf_mode = "blocking"
+
+[[upstream]]
+name = "default"
+address = "127.0.0.1:8080"
+use_tls = false
+sni = "default"
+waf_rules = "default.conf"
+waf_mode = "blocking"

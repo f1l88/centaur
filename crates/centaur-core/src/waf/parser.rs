@@ -17,7 +17,8 @@ pub fn parse_secrule(line: &str) -> Option<ParsedRule> {
         return None;
     }
 
-    let re = Regex::new(r#"(?i)^SecRule\s+([^\s]+)\s+"?@?([a-zA-Z0-9_]+)\s+([^"]+)"?\s+"?(.+)"?"#).unwrap();
+    let re = Regex::new(r#"(?i)^SecRule\s+([^\s]+)\s+"?@?([a-zA-Z0-9_]+)\s+([^"]+)"?\s+"?(.+)"?"#)
+        .unwrap();
     let caps = re.captures(line)?;
     let variable = caps.get(1)?.as_str().to_string();
     let operator = caps.get(2)?.as_str().to_string();
@@ -37,7 +38,16 @@ pub fn parse_secrule(line: &str) -> Option<ParsedRule> {
         }
     }
 
-    let id = actions.get("id").and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    let id = actions
+        .get("id")
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
 
-    Some(ParsedRule { id, variable, operator, argument, actions })
+    Some(ParsedRule {
+        id,
+        variable,
+        operator,
+        argument,
+        actions,
+    })
 }
