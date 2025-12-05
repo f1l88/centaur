@@ -1,10 +1,10 @@
-# 🏹 Centaur - Rust WAF Proxy (Open Source Web Application Firewall on Rust (Pingora + ModSecurity SecRule + Hot Reload))
+# 🏹 Centaur - Rust WAF Proxy (Open Source Web Application Firewall on Rust (Pingora + Hot Reload))
 
 ![Rust](https://img.shields.io/badge/Rust-1.70+-orange?logo=rust)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Pingora](https://img.shields.io/badge/Powered_by-Pingora-green)
 
-A high-performance Web Application Firewall (WAF) proxy built with **Rust** and **Pingora**, featuring ModSecurity rule support and hot-reload capabilities.
+A high-performance Web Application Firewall (WAF) proxy built with **Rust** and **Pingora**, featuring rule support and hot-reload capabilities.
 
 ## ✨ Features
 
@@ -37,20 +37,6 @@ centaur/
 ├── config.toml          # Configuration
 ├── Cargo.toml
 └── README.md
-
-### Installation ModSecurity
-```bash
-git clone --depth 1 -b v3/master --single-branch https://github.com/SpiderLabs/ModSecurity /usr/local/src/ModSecurity/
-cd /usr/local/src/ModSecurity/
-sudo apt install gcc make build-essential autoconf automake libtool libcurl4-openssl-dev liblua5.3-dev libfuzzy-dev ssdeep gettext pkg-config libpcre3 libpcre3-dev libxml2 libxml2-dev libcurl4 libgeoip-dev libyajl-dev doxygen libpcre2-16-0 libpcre2-dev libpcre2-posix3 -y
-git submodule init
-git submodule update
-./build.sh
-./configure
-make
-make install
-export PKG_CONFIG_PATH=/usr/local/modsecurity/lib/pkgconfig:$PKG_CONFIG_PATH
-export LD_LIBRARY_PATH=/usr/local/modsecurity/lib:$LD_LIBRARY_PATH
 
 ```
 
