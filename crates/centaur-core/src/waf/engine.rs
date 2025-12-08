@@ -1,126 +1,196 @@
-use modsecurity::{ModSecurity, Rules};
+use crate::waf::parser::{load_toml_rules, ParsedRule};
+use crate::waf::operator::{check_operator, operator_desc};
+
 use pingora::http::HMap;
-use std::{fs, path::Path};
+use std::{path::Path};
 
 #[derive(Debug, Clone)]
 pub struct WafCheckResult {
     pub allowed: bool,
-    pub matched_rule: Option<String>,
+    pub matched_rule: Option<ParsedRule>,
     pub header_name: Option<String>,
     pub header_value: Option<String>,
     pub reason: String,
     pub rule_id: u32,
+    pub msg: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct Engine {
-    ms: ModSecurity,
-    rules: Rules,
+    pub rules: Vec<ParsedRule>,
 }
 
 impl Engine {
-    /// Загружает правила ModSecurity из файла (например `rules/example.conf`)
+    /// Загружает TOML-файл содержащий [[rule]]
     pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
-        let rules_text = fs::read_to_string(&path)?;
-        let ms = ModSecurity::default();
-
-        let mut rules = Rules::new();
-        rules
-            .add_plain(&rules_text)
-            .map_err(|e| anyhow::anyhow!("Ошибка загрузки правил: {e}"))?;
-
-        println!("✅ Правила ModSecurity успешно загружены из: {}", path.as_ref().display());
-        Ok(Self { ms, rules })
+        let rules = load_toml_rules(path.as_ref())?;
+        println!("✅ Загружено {} WAF правил", rules.len());
+        Ok(Self { rules })
     }
 
-    /// Основной метод проверки (совместим с прежним API)
-    pub fn check_detailed(&self, headers: &HMap, uri: &str) -> WafCheckResult {
-        let mut tx = match self.ms.transaction_builder().with_rules(&self.rules).build() {
-            Ok(tx) => tx,
-            Err(e) => {
+    pub fn check(&self, request_line: &str, headers: &HMap, uri: &str) -> bool {
+        self.check_detailed(request_line, headers, uri).allowed
+    }
+
+    pub fn check_detailed(&self, request_line: &str, headers: &HMap, uri: &str) -> WafCheckResult {
+        for rule in &self.rules {
+            let mut matched = false;
+            let mut reason = String::new();
+            let mut target_value = String::new();
+            let mut target_name = String::new();
+            let _msg = String::new();
+
+            // ----------------------------
+            // REQUEST_HEADERS:NAME
+            // ----------------------------
+            if rule.variable.starts_with("REQUEST_HEADERS:") {
+                if let Some((_, header_name)) = rule.variable.split_once(':') {
+                    let key = header_name.to_ascii_lowercase();
+
+                    if let Some(value) = headers.get(&key) {
+                        let header_value = value.to_str().unwrap_or_default();
+
+                        target_name = header_name.to_string();
+                        target_value = header_value.to_string();
+
+                        let v = header_value.to_ascii_lowercase();
+                        let arg = rule.pattern.to_ascii_lowercase();
+
+                        matched = check_operator(&rule.operator, &v, &arg);
+
+                        if matched {
+                            reason = format!(
+                                "header '{}' {} '{}'",
+                                header_name,
+                                operator_desc(&rule.operator),
+                                rule.pattern
+                            );
+                        }
+                    }
+                }
+            }
+            // ----------------------------
+            // REQUEST_URI
+            // ----------------------------
+            else if rule.variable == "REQUEST_URI" {
+                target_name = "URI".into();
+                target_value = uri.into();
+
+                let v = uri.to_ascii_lowercase();
+                let arg = rule.pattern.to_ascii_lowercase();
+
+                matched = check_operator(&rule.operator, &v, &arg);
+
+
+                if matched {
+                    reason = format!(
+                        "URI {} '{}'",
+                        operator_desc(&rule.operator),
+                        rule.pattern
+                    );
+                }
+            }
+
+            else if rule.variable == "REQUEST_LINE" {
+                target_value = request_line.to_string();
+                target_name = "REQUEST_LINE".to_string();
+
+                let v = request_line.to_ascii_lowercase();
+                let arg = rule.pattern.to_ascii_lowercase();
+
+                matched = check_operator(&rule.operator, &v, &arg);
+
+                if matched {
+                    reason = format!(
+                        "REQUEST_LINE {} '{}'",
+                        operator_desc(&rule.operator),
+                        rule.pattern
+                    );
+                }
+            }
+
+
+            // Если правило сработало
+            if matched {
+                let is_blocking = rule.actions.get("action")
+                    == Some(&"deny".to_string());
+
                 return WafCheckResult {
-                    allowed: true,
-                    matched_rule: None,
-                    header_name: None,
-                    header_value: None,
-                    reason: format!("Ошибка создания транзакции: {e}"),
-                    rule_id: 0,
-                }
-            }
-        };
-
-        // Метод и версия по умолчанию
-        let method = "GET";
-        if let Err(e) = tx.process_uri(uri, method, "1.1") {
-            return WafCheckResult {
-                allowed: true,
-                matched_rule: None,
-                header_name: None,
-                header_value: None,
-                reason: format!("Ошибка process_uri: {e}"),
-                rule_id: 0,
-            };
-        }
-
-        // Передаём заголовки - преобразуем HeaderName в строку
-        for (name, value) in headers.iter() {
-            if let Ok(v) = value.to_str() {
-                // Преобразуем HeaderName в строку с помощью to_string()
-                if let Err(e) = tx.add_request_header(&name.to_string(), v) {
-                    eprintln!("Ошибка добавления заголовка {}: {}", name, e);
-                }
+                    allowed: !is_blocking,
+                    matched_rule: Some(rule.clone()),
+                    header_name: Some(target_name),
+                    header_value: Some(target_value),
+                    reason,
+                    rule_id: rule.id,
+                    msg: rule.msg.clone(),
+                };
             }
         }
 
-        if let Err(e) = tx.process_request_headers() {
-            return WafCheckResult {
-                allowed: true,
-                matched_rule: None,
-                header_name: None,
-                header_value: None,
-                reason: format!("Ошибка process_request_headers: {e}"),
-                rule_id: 0,
-            };
-        }
-
-        // Проверяем, было ли вмешательство (intervention)
-        if let Some(intervention) = tx.intervention() {
-            let status = intervention.status();
-            
-            // Получаем сообщение из лога, как в примере
-            let message = if let Some(log) = intervention.log() {
-                log.to_string()
-            } else {
-                format!("Блокировка ModSecurity с кодом {}", status)
-            };
-
-            return WafCheckResult {
-                allowed: false,
-                matched_rule: Some(message.clone()),
-                header_name: None,
-                header_value: None,
-                reason: format!("Блокировка ModSecurity: {}", message),
-                rule_id: status as u32,
-            };
-        }
-
-        // Если всё прошло успешно
+        // Ни одно правило не сработало
         WafCheckResult {
             allowed: true,
             matched_rule: None,
             header_name: None,
             header_value: None,
-            reason: "Разрешено ModSecurity".into(),
+            reason: "Ни одно правило не сработало".to_string(),
             rule_id: 0,
+            msg: Some("".to_owned()),
         }
     }
 
-    /// Упрощённая проверка (true = разрешено)
-    pub fn check(&self, headers: &HMap, uri: &str) -> bool {
-        self.check_detailed(headers, uri).allowed
-    }
+    // ----------------------------
+    // OPERATORS
+    // ----------------------------
+    // fn check_operator(op: &str, value: &str, argument: &str) -> bool {
+    //     match op.to_lowercase().as_str() {
+    //         "contains" | "pm" => value.contains(argument),
+    //         "streq" => value == argument,
+    //         "rx" => regex::Regex::new(argument)
+    //             .map(|r| r.is_match(value))
+    //             .unwrap_or(false),
+    //         _ => false,
+    //     }
+    // }
 
-    /// Информация о текущем наборе правил
+    // fn operator_desc(operator: &str) -> &'static str {
+    //     match operator.to_lowercase().as_str() {
+    //         "contains" | "pm" => "содержит",
+    //         "streq" => "равно",
+    //         "rx" => "совпадает с regex",
+    //         _ => "проверяется по",
+    //     }
+    // }
+
+    // ----------------------------
+    // INFO
+    // ----------------------------
     pub fn get_rules_info(&self) -> String {
-        "Правила ModSecurity загружены".to_string()
+        let total = self.rules.len();
+
+        let blocking = self.rules
+            .iter()
+            .filter(|r| r.actions.get("action") == Some(&"deny".to_string()))
+            .count();
+
+        let uri_rules = self.rules
+            .iter()
+            .filter(|r| r.variable == "REQUEST_URI")
+            .count();
+
+        let header_rules = self.rules
+            .iter()
+            .filter(|r| r.variable.starts_with("REQUEST_HEADERS:"))
+            .count();
+
+        format!(
+            "Всего правил: {} (блокирующих: {}, логгируемых: {})\n\
+             Правил URI: {}, Правил заголовков: {}",
+            total,
+            blocking,
+            total - blocking,
+            uri_rules,
+            header_rules
+        )
     }
 }

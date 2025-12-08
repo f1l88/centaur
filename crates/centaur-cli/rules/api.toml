@@ -1,0 +1,30 @@
+[[rule]]
+id = 1001
+phase = 1
+variables = "REQUEST_URI"
+operators = "streq"
+pattern = "/admin"
+#transformation = "none"
+actions  = "deny"
+status = 403
+msg = "Block secret path"
+
+[[rule]]
+id = 1002
+phase = 1
+variables = "REQUEST_HEADERS:User-Agent"
+operators = "streq"
+pattern = "BadBot"
+#transformation = "none"
+actions  = "deny"
+status = 403
+msg = "BadBot user agent"
+
+[[rule]]
+id = 149
+phase = 1
+variables = "REQUEST_LINE"
+operators = "beginsWith"
+pattern = "GET"
+actions = "deny"
+msg = "Request does not begin with GET"

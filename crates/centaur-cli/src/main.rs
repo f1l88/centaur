@@ -5,24 +5,30 @@ use pingora::upstreams::peer::HttpPeer;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::collections::HashMap;
+//use std::collections::HashMap;
+
+use centaur_core::{Engine, SharedWaf};
 
 use serde::Deserialize;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-struct MyProxy {
-    waf_engines: HashMap<String, Arc<SharedWaf>>, // upstream_name -> WAF
-    config: Config,
-}
+/// Shared map: upstream_name -> SharedWaf
+/// RwLock so we can reload engines in-place
+type WafMap = Arc<RwLock<HashMap<String, Arc<SharedWaf>>>>;
 
-#[derive(Deserialize, Clone)]
+// struct MyProxy {
+//     waf_engines: HashMap<String, Arc<SharedWaf>>, // upstream_name -> WAF
+//     config: Config,
+// }
+
+#[derive(Deserialize, Clone, Debug)]
 struct Config {
     server: ServerConfig,
     upstream: Vec<UpstreamConfig>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Debug,Deserialize, Clone)]
 struct ServerConfig {
     proxy_port: u16,
     admin_port: u16,
@@ -57,6 +63,7 @@ struct AppState {
 impl AppState {
     async fn load_wafs(config: &Config) -> WafMap {
         let mut map = HashMap::new();
+        
         for upstream in &config.upstream {
             let rules_path = format!("{}/rules/{}", env!("CARGO_MANIFEST_DIR"), upstream.waf_rules);
             if !std::path::Path::new(&rules_path).exists() {
@@ -69,7 +76,7 @@ impl AppState {
                 }
                 Err(e) => {
                     warn!(upstream = %upstream.name, err = %e, "Failed to load rules, attempting default");
-                    let default_path = format!("{}/rules/default.conf", env!("CARGO_MANIFEST_DIR"));
+                    let default_path = format!("{}/rules/default.toml", env!("CARGO_MANIFEST_DIR"));
                     match Engine::load(&default_path) {
                         Ok(engine) => {
                             map.insert(upstream.name.clone(), Arc::new(SharedWaf::new(engine, default_path.clone())));
@@ -192,6 +199,16 @@ impl ProxyHttp for AppState {
             .unwrap_or("unknown")
             .to_lowercase();
 
+        // Pingora’s version enum → convert to HTTP/x.x
+        let version = match headers.version {
+            pingora::http::Version::HTTP_10 => "HTTP/1.0",
+            pingora::http::Version::HTTP_11 => "HTTP/1.1",
+            pingora::http::Version::HTTP_2 => "HTTP/2",
+            _ => "HTTP/1.1", // fallback
+        };
+
+        //let request_line = format!("{} {} {}", method, uri, version);
+
         // find upstream
         let upstream = match self.find_upstream(&host_header) {
             Some(u) => u,
@@ -216,14 +233,15 @@ impl ProxyHttp for AppState {
         let client_ip = session.client_addr().map(|a| a.to_string()).unwrap_or_else(|| "unknown".into());
         let method = headers.method.as_str();
         let uri = headers.uri.to_string();
-
+        let request_line = format!("{} {} {}", method, uri, version);
+        
         // A more complete check would pass body, args, cookies etc.
-        let waf_result = waf.check_detailed(&headers.headers, &uri);
+        let waf_result = waf.check_detailed(&request_line, &headers.headers, &uri);
 
         info!(upstream = %upstream.name, method = %method, uri = %uri, client = %client_ip, "WAF check");
 
         if !waf_result.allowed {
-            warn!(upstream = %upstream.name, rule_id = waf_result.rule_id, "Blocked by WAF: {}", waf_result.reason);
+            warn!(upstream = %upstream.name, rule_id = waf_result.rule_id, msg = waf_result.msg.as_deref().unwrap_or(""), "Blocked by WAF: {}", waf_result.reason);
             session.respond_error(403).await?;
             return Ok(true);
         }

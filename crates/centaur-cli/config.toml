@@ -7,7 +7,7 @@ name = "api"
 address = "127.0.0.1:8080"
 use_tls = false
 sni = "api.example.com"
-waf_rules = "api.conf"
+waf_rules = "api.toml"
 waf_mode = "blocking"
 
 [[upstream]]
@@ -15,21 +15,5 @@ name = "web"
 address = "127.0.0.1:8888"
 use_tls = false
 sni = "web.example.com"
-waf_rules = "web.conf"
-waf_mode = "blocking"
-
-[[upstream]]
-name = "admin"
-address = "127.0.0.1:8082"
-use_tls = false
-sni = "admin.example.com"
-waf_rules = "admin.conf"
-waf_mode = "blocking"
-
-[[upstream]]
-name = "default"
-address = "127.0.0.1:8080"
-use_tls = false
-sni = "default"
-waf_rules = "default.conf"
+waf_rules = "web.toml"
 waf_mode = "blocking"

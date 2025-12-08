@@ -22,14 +22,14 @@ impl SharedWaf {
         }
     }
 
-    pub fn check(&self, headers: &pingora::http::HMap, uri: &str) -> bool {
+    pub fn check(&self, request_line: &str, headers: &pingora::http::HMap, uri: &str) -> bool {
         let engine = self.inner.read().expect("WAF lock poisoned");
-        engine.check(headers, uri)
+        engine.check(request_line, headers, uri)
     }
 
-    pub fn check_detailed(&self, headers: &pingora::http::HMap, uri: &str) -> WafCheckResult {
+    pub fn check_detailed(&self, request_line: &str, headers: &pingora::http::HMap, uri: &str) -> WafCheckResult {
         let engine = self.inner.read().expect("WAF lock poisoned");
-        engine.check_detailed(headers, uri)
+        engine.check_detailed(request_line, headers, uri)
     }
 
     // ... остальные методы остаются без изменений

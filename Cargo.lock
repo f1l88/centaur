@@ -249,7 +249,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "hyper",
- "modsecurity",
  "pingora",
  "pingora-core",
  "regex",
@@ -896,25 +895,6 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "modsecurity"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08413b14562368af2f733a9ae396b2673b185a744329b9fed0de7c447d99bfb1"
-dependencies = [
- "lazy_static",
- "modsecurity-sys",
-]
-
-[[package]]
-name = "modsecurity-sys"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5702ca55e043857447373eb4e9f18078c0a676c1951a43f431502d1e3bab4ffb"
-dependencies = [
- "pkg-config",
 ]
 
 [[package]]
