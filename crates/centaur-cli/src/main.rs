@@ -175,22 +175,63 @@ impl AppState {
     }
 }
 
+// Имя выбранного upstream
+type UpstreamContext = Option<String>;
+
 #[async_trait::async_trait]
 impl ProxyHttp for AppState {
-    type CTX = ();
+    // Используем свой тип контекста
+    type CTX = UpstreamContext;
 
-    fn new_ctx(&self) -> Self::CTX { () }
+    fn new_ctx(&self) -> Self::CTX {
+        None // Изначально контекст пустой
+    }
 
-    async fn upstream_peer(&self, _session: &mut Session, _ctx: &mut Self::CTX) -> pingora::Result<Box<HttpPeer>> {
+    async fn upstream_peer(&self, _session: &mut Session, ctx: &mut Self::CTX) -> pingora::Result<Box<HttpPeer>> {
         // For routing we need host from the request headers which are available in session.
         // The Pingora API in this example doesn't provide full typed header access here, so
         // the real implementation should extract host from session earlier or pass it via ctx.
         // Keep this minimal: fallback to first upstream.
-        let upstream = self.config.upstream.first().expect("No upstreams configured");
-        Ok(Box::new(HttpPeer::new(upstream.address.clone(), upstream.use_tls, upstream.sni.clone())))
+        info!("Selecting upstream from context: {:?}", ctx);
+        if let Some(upstream_name) = ctx {
+                let upstream = self.config.upstream
+                    .iter()
+                    .find(|u| &u.name == upstream_name);
+                
+                match upstream {
+                    Some(u) => {
+                        info!("Selected upstream: {} -> {}", upstream_name, u.address);
+                        Ok(Box::new(HttpPeer::new(
+                            u.address.clone(),
+                            u.use_tls,
+                            u.sni.clone()
+                        )))
+                    }
+                    None => {
+                        error!("Upstream '{}' not found in config", upstream_name);
+                        // Возвращаем первый upstream как fallback
+                        let fallback = self.config.upstream.first()
+                            .expect("No upstreams configured");
+                        Ok(Box::new(HttpPeer::new(
+                            fallback.address.clone(),
+                            fallback.use_tls,
+                            fallback.sni.clone()
+                        )))
+                    }
+                }
+            } else {
+                error!("No upstream selected in context, using first upstream");
+                let upstream = self.config.upstream.first()
+                    .expect("No upstreams configured");
+                Ok(Box::new(HttpPeer::new(
+                    upstream.address.clone(),
+                    upstream.use_tls,
+                    upstream.sni.clone()
+                )))
+            }
     }
 
-    async fn request_filter(&self, session: &mut Session, _ctx: &mut Self::CTX) -> pingora::Result<bool> {
+    async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> pingora::Result<bool> {
         let headers = session.req_header();
         let host_header = headers
             .headers
@@ -198,6 +239,19 @@ impl ProxyHttp for AppState {
             .and_then(|h| h.to_str().ok())
             .unwrap_or("unknown")
             .to_lowercase();
+
+        // Находим upstream по хосту
+        let upstream = match self.find_upstream(&host_header) {
+            Some(u) => u,
+            None => {
+                warn!(host = %host_header, "No upstream found, responding 404");
+                session.respond_error(404).await?;
+                return Ok(true);
+            }
+        };
+
+        // Сохраняем имя upstream в контекст для использования в upstream_peer
+        *ctx = Some(upstream.name.clone());
 
         // Pingora’s version enum → convert to HTTP/x.x
         let version = match headers.version {
