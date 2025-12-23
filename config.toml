@@ -1,0 +1,33 @@
+[server]
+proxy_port = 6188
+admin_port = 8081
+
+[[upstream]]
+name = "api"
+address = "0.0.0.0:3000"
+use_tls = false
+sni = "api.example.com"
+waf_rules = "api"  # Специфичные правила для API
+#waf_mode = "strict"     # Режим WAF
+
+[[upstream]]
+name = "web"
+address = "127.0.0.1:8083"
+use_tls = false
+sni = "www.example.com"
+waf_rules = "web"  # Правила для веб-сайта
+#waf_mode = "moderate"
+
+[[upstream]]
+name = "admin"
+address = "127.0.0.1:8888"
+use_tls = false  
+sni = "admin.example.com"
+waf_rules = "admin"  # Строгие правила для админки
+#waf_mode = "blocking"
+
+# Опциональная секция для настройки tracing
+[tracing]
+level = "debug"  # или "trace", "info", "warn", "error"
+output = "both"  # "console", "json", "both"
+enable_ansi = true

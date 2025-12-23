@@ -1,10 +1,10 @@
-# 🏹 Centaur - Rust WAF Proxy (Open Source Web Application Firewall on Rust (Pingora + Hot Reload))
+# 🏹 PingWAF - Rust WAF Proxy (Open Source Web Application Firewall on Rust (Pingora + ModSecurity SecRule + Hot Reload))
 
 ![Rust](https://img.shields.io/badge/Rust-1.70+-orange?logo=rust)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Pingora](https://img.shields.io/badge/Powered_by-Pingora-green)
 
-A high-performance Web Application Firewall (WAF) proxy built with **Rust** and **Pingora**, featuring rule support and hot-reload capabilities.
+A high-performance Web Application Firewall (WAF) proxy built with **Rust** and **Pingora**, featuring ModSecurity rule support and hot-reload capabilities.
 
 ## ✨ Features
 
@@ -24,33 +24,72 @@ A high-performance Web Application Firewall (WAF) proxy built with **Rust** and 
 - cargo 1.90.0
 
 ### Project Structure
-centaur/
-├── src/
-│   ├── main.rs          # Main application
-│   ├── lib.rs           # Main application
-│   └── waf/             # WAF engine
-│       ├── mod.rs       # WAF module
-│       ├── parser.rs    # Rule parser
-│       └── reloader.rs  # Hot reload logic
-├── rules/
-│   └── example.conf     # WAF rules
-├── config.toml          # Configuration
+pingwaf/
+├── Cargo.lock
 ├── Cargo.toml
+├── pingwaf-cli
+│   ├── Cargo.toml
+│   ├── config.toml
+│   ├── rules
+│   │   ├── admin.conf
+│   │   ├── api.conf
+│   │   ├── default.conf
+│   │   └── web.conf
+│   └── src
+│       ├── main.rs
+│       └── waf
+│           ├── example.conf
+│           └── mod.rs
+├── pingwaf-core
+│   ├── Cargo.toml
+│   ├── rules
+│   │   └── example.conf
+│   ├── src
+│   │   ├── lib.rs
+│   │   └── waf
+│   │       ├── engine.rs
+│   │       ├── engine.rs.old
+│   │       ├── mod.rs
+│   │       ├── parser.rs
+│   │       └── reloader.rs
+│   ├── test_rules.conf
+│   └── tests
+│       └── engine_test.rs
 └── README.md
+
+### Installation ModSecurity
+```bash
+sudo apt install gcc make build-essential autoconf automake libtool libcurl4-openssl-dev liblua5.3-dev libfuzzy-dev ssdeep gettext pkg-config libpcre3 libpcre3-dev libxml2 libxml2-dev libcurl4 libgeoip-dev libyajl-dev doxygen libpcre2-16-0 libpcre2-dev libpcre2-posix3 -y
+
+git clone --depth 1 -b v3/master --single-branch https://github.com/SpiderLabs/ModSecurity /usr/local/src/ModSecurity/
+cd /usr/local/src/ModSecurity/
+
+git submodule init
+git submodule update
+
+./build.sh
+./configure
+
+make
+make install
+
+export PKG_CONFIG_PATH=/usr/local/modsecurity/lib/pkgconfig:$PKG_CONFIG_PATH
+export LD_LIBRARY_PATH=/usr/local/modsecurity/lib:$LD_LIBRARY_PATH
 
 ```
 
 ### Installation Centaur WAF
 ```bash
 # Clone the repository
-git clone https://github.com/f1l88/centaur.git
-cd centaur
+git clone https://github.com/f1l88/pingwaf.git
+cd pingwaf
 
 # Build the project
 cargo build --release
 
 # Run the proxy
-cargo run -p centaur-cli
+cargo run -- run
+RUST_LOG=trace cargo run -- run
 
 ```
 
@@ -68,5 +107,24 @@ kill -HUP $(pgrep rust-waf-pingora-secrule-reload)
 3. curl -v -H "User-Agent: Mozilla/5.0 Chrome" http://127.0.0.1:6188/ - Allow
 4. curl -v -H "User-Agent: BadBot" http://localhost:6188/ - Block
 5. curl -v -H "User-Agent: Mozilla/5.0 Chrome" http://127.0.0.1:6188/admin - Block
-6. curl -v -H "User-Agent: Mozilla/5.0 Chrome" -H "Host: web.example.com" http://127.0.0.1:6188/status
+6. curl -v -H "X-Client-Port: 22" -H "User-Agent: Test" http://127.0.0.1:6188/ - Block
+7. curl -v -H "User-Agent: BadBot" -H "Host: admin.example.com" http://localhost:6188/
+8. curl -v -H "Host: admin.example.com" -A "masscan" "http://127.0.0.1:6188/"
+9. curl -v -X POST "http://localhost:6188"   -H "Host: admin.example.com"   -H "Content-Type: application/json"   -d '{"input": "<script>alert(\"xss\")</script>"}'
+```
+
+## Perform testing
+```bash
+sudo apt install wrk  # Ubuntu/Debian
+
+# Базовый тест
+wrk -t12 -c100 -d30s -H "Host: admin.example.com" -H "User-Agent: masscan" "http://127.0.0.1:6188/"
+```
+
+## Logging 
+```bash
+RUST_LOG=debug ./your_proxy
+# или
+RUST_LOG=pingwaf=info,hyper=warn ./your_proxy
+
 ```

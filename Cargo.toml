@@ -1,8 +1,24 @@
-[workspace]
-members = [
-    "crates/centaur-core", 
-    "crates/centaur-cli",
-]
+[package]
+name = "pingwaf2"
+version = "0.1.0"
+edition = "2021"
+authors = ["alexey.filatov.1988@google.com>"]
 
-resolver = "2"
-
+[dependencies]
+pingora = { version = "0.6", features = ["proxy"] }
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+hyper = { version = "0.14", features = ["full"] }
+regex = "1.11.3"
+anyhow = "1.0.100"
+serde = "1.0.228"
+toml = "0.9.8"
+pingora-core = "0.6.0"
+tracing = "0.1.41"
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
+parking_lot = "0.12.5"
+chrono = "0.4.42"
+bytes = "1.11.0"
+modsecurity = "1.0.0"
+clap = { version = "4.5.53", features = ["derive"] }
