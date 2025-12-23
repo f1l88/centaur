@@ -25,6 +25,8 @@ A high-performance Web Application Firewall (WAF) proxy built with **Rust** and 
 
 ### Installation ModSecurity
 ```bash
+# Install on Debian 13
+
 sudo apt install gcc make build-essential autoconf automake libtool libcurl4-openssl-dev liblua5.3-dev libfuzzy-dev ssdeep gettext pkg-config libpcre3 libpcre3-dev libxml2 libxml2-dev libcurl4 libgeoip-dev libyajl-dev doxygen libpcre2-16-0 libpcre2-dev libpcre2-posix3 -y
 
 git clone --depth 1 -b v3/master --single-branch https://github.com/SpiderLabs/ModSecurity /usr/local/src/ModSecurity/
