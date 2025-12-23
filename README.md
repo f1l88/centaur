@@ -1,4 +1,4 @@
-# 🏹 PingWAF - Rust WAF Proxy (Open Source Web Application Firewall on Rust (Pingora + ModSecurity SecRule + Hot Reload))
+# 🏹 Centaur - Rust WAF Proxy (Open Source Web Application Firewall on Rust (Pingora + ModSecurity SecRule + Hot Reload))
 
 ![Rust](https://img.shields.io/badge/Rust-1.70+-orange?logo=rust)
 ![License](https://img.shields.io/badge/License-MIT-blue)
@@ -24,38 +24,55 @@ A high-performance Web Application Firewall (WAF) proxy built with **Rust** and 
 - cargo 1.90.0
 
 ### Project Structure
-pingwaf/
+centaur
 ├── Cargo.lock
 ├── Cargo.toml
-├── pingwaf-cli
-│   ├── Cargo.toml
-│   ├── config.toml
-│   ├── rules
-│   │   ├── admin.conf
-│   │   ├── api.conf
-│   │   ├── default.conf
-│   │   └── web.conf
-│   └── src
-│       ├── main.rs
-│       └── waf
-│           ├── example.conf
-│           └── mod.rs
-├── pingwaf-core
-│   ├── Cargo.toml
-│   ├── rules
-│   │   └── example.conf
-│   ├── src
-│   │   ├── lib.rs
-│   │   └── waf
-│   │       ├── engine.rs
-│   │       ├── engine.rs.old
-│   │       ├── mod.rs
-│   │       ├── parser.rs
-│   │       └── reloader.rs
-│   ├── test_rules.conf
-│   └── tests
-│       └── engine_test.rs
-└── README.md
+├── config.toml
+├── logs
+├── README.md
+├── rules
+│   ├── admin
+│   │   ├── crs
+│   │   │   ├── *.conf
+|   |   |   ├── *.data
+│   │   └── crs-setup.conf
+│   ├── api
+│   │   ├── crs
+│   │   │   ├── *.data
+│   │   │   ├── *.conf
+│   │   └── crs-setup.conf
+│   ├── default
+│   │   ├── crs
+│   │   │   ├── *.data
+│   │   │   ├── *.conf
+│   │   └── crs-setup.conf
+│   └── web
+│       ├── crs
+│       │   ├── *.data
+│       │   ├── *.conf
+│       └── crs-setup.conf
+└── src
+    ├── cli
+    │   ├── cli.rs
+    │   └── mod.rs
+    ├── config
+    │   ├── config.rs
+    │   └── mod.rs
+    ├── logger
+    │   ├── logger.rs
+    │   └── mod.rs
+    ├── main.rs
+    ├── proxy
+    │   ├── mod.rs
+    │   └── proxy.rs
+    ├── waf
+    │   ├── engine.rs
+    │   ├── mod.rs
+    │   └── reloader.rs
+    └── web
+        ├── api.rs
+        ├── mod.rs
+        └── ui.rs
 
 ### Installation ModSecurity
 ```bash
@@ -81,8 +98,8 @@ export LD_LIBRARY_PATH=/usr/local/modsecurity/lib:$LD_LIBRARY_PATH
 ### Installation Centaur WAF
 ```bash
 # Clone the repository
-git clone https://github.com/f1l88/pingwaf.git
-cd pingwaf
+git clone https://github.com/f1l88/centaur.git
+cd centaur
 
 # Build the project
 cargo build --release
@@ -90,7 +107,10 @@ cargo build --release
 # Run the proxy
 cargo run -- run
 RUST_LOG=trace cargo run -- run
-
+```
+## Install CoreRuleset
+```bash
+git clone https://github.com/coreruleset/coreruleset
 ```
 
 Reload:
