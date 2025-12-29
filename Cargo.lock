@@ -290,6 +290,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "centaur"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "clap 4.5.53",
+ "hyper",
+ "modsecurity",
+ "parking_lot",
+ "pingora",
+ "pingora-core",
+ "regex",
+ "serde",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "cf-rustracing"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1501,29 +1524,6 @@ dependencies = [
  "pin-project-lite",
  "thread_local",
  "tokio",
-]
-
-[[package]]
-name = "pingwaf2"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "chrono",
- "clap 4.5.53",
- "hyper",
- "modsecurity",
- "parking_lot",
- "pingora",
- "pingora-core",
- "regex",
- "serde",
- "tokio",
- "toml",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
 ]
 
 [[package]]

@@ -81,6 +81,7 @@ impl BodyInspector {
 pub struct RequestContext {
     pub body_inspector: BodyInspector,
     pub upstream_name: Option<String>,
+    pub upstream_key: Option<String>,
     pub client_ip: String,
     pub violations: Vec<WafViolation>,
 }
@@ -90,26 +91,100 @@ impl RequestContext {
         Self {
             body_inspector: BodyInspector::new(10 * 1024 * 1024, true), // 10MB по умолчанию
             upstream_name: None,
+            upstream_key: None,
             client_ip: client_ip.to_string(),
             violations: Vec::new(),
         }
     }
 }
 
+pub struct ProxyManager {
+    pub proxies: HashMap<String, Arc<MyProxy>>,
+    pub config: Config,
+}
+
+impl ProxyManager {
+    pub fn new(config: Config) -> Self {
+        let mut proxies = HashMap::new();
+        
+        for server_name in config.get_servers().keys() {
+            let proxy = MyProxy::new_for_server(config.clone(), server_name);
+            proxies.insert(server_name.clone(), Arc::new(proxy));
+        }
+        
+        Self { proxies, config }
+    }
+    
+    pub fn get_proxy(&self, server_name: &str) -> Option<Arc<MyProxy>> {
+        self.proxies.get(server_name).cloned()
+    }
+
+    pub fn get_server_list(&self) -> Vec<String> {
+        self.proxies.keys().cloned().collect()
+    }
+        
+    pub fn reload_all_rules(&self) -> Result<(), String> {
+        let mut errors = Vec::new();
+        
+        for (name, proxy) in &self.proxies {
+            if let Err(e) = proxy.reload_all_rules() {
+                errors.push(format!("Failed to reload rules for {}: {}", name, e));
+            }
+        }
+        
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.join("; "))
+        }
+    }
+
+    pub fn get_all_rules_info(&self) -> String {
+        let mut info = String::new();
+        for (server_name, proxy) in &self.proxies {
+            info.push_str(&format!("=== Server: {} ===\n", server_name));
+            info.push_str(&proxy.get_all_rules_info());
+            info.push_str("\n");
+        }
+        info
+    }
+
+    // Добавим метод для получения информации о WAF (просто обертка для первого прокси)
+    pub fn get_waf_info(&self) -> String {
+        if let Some((first_name, first_proxy)) = self.proxies.iter().next() {
+            format!("Proxy Manager - First server '{}': {}", first_name, first_proxy.get_waf_info())
+        } else {
+            "No proxies available".to_string()
+        }
+    }
+        
+    pub fn get_server_info(&self, server_name: &str) -> Option<String> {
+        self.proxies.get(server_name)
+        .map(|proxy| proxy.get_waf_info())
+    }
+}
+
+
 pub(crate) struct MyProxy {
     waf_engines: HashMap<String, Arc<SharedWaf>>,
     config: Config,
+    server_name: String,
 }
 
 impl MyProxy {
-    #[instrument(name = "MyProxy::from_config")]
-    fn from_config() -> Self {
-        let config = Config::load();
+    #[instrument(name = "MyProxy::new_for_server")]
+    pub fn new_for_server(config: Config, server_name: &str) -> Self {
+        let server = config.get_server(server_name)
+            .unwrap_or_else(|| panic!("Server '{}' not found in config", server_name));
+
         let mut waf_engines = HashMap::new();
 
         info!("Loading WAF rules for each upstream");
 
-        for upstream in &config.upstream {
+        for upstream_key in &server.upstreams {
+            let upstream = config.get_upstream(upstream_key)
+                .unwrap_or_else(|| panic!("Upstream '{}' not found in config", upstream_key));
+            
             let rules_path = format!(
                 "{}/rules/{}/crs-setup.conf", 
                 env!("CARGO_MANIFEST_DIR"),
@@ -119,25 +194,25 @@ impl MyProxy {
             match Engine::load(&rules_path) {
                 Ok(engine) => {
                     let shared_waf = Arc::new(SharedWaf::new(engine, rules_path.clone()));
-                    waf_engines.insert(upstream.name.clone(), shared_waf);
-                    info!(upstream = %upstream.name, rules = %upstream.waf_rules, "WAF rules loaded successfully");
+                    waf_engines.insert(upstream_key.clone(), shared_waf);
+                    info!(upstream = %upstream_key, rules = %upstream.waf_rules, "WAF rules loaded successfully");
                 }
                 Err(e) => {
-                    error!(upstream = %upstream.name, rules = %upstream.waf_rules, error = %e, "Failed to load WAF rules");
+                    error!(upstream = %upstream_key, rules = %upstream.waf_rules, error = %e, "Failed to load WAF rules");
                     let default_path = format!("{}/rules/default/default.conf", env!("CARGO_MANIFEST_DIR"));
                     match Engine::load(&default_path) {
                         Ok(engine) => {
                             let shared_waf = Arc::new(SharedWaf::new(engine, default_path));
-                            waf_engines.insert(upstream.name.clone(), shared_waf);
-                            warn!(upstream = %upstream.name, "Using default rules");
+                            waf_engines.insert(upstream_key.clone(), shared_waf);
+                            warn!(upstream = %upstream_key, "Using default rules");
                         }
                         Err(e) => {
                             error!(error = %e, "Failed to load default rules");
                             match Engine::load("") {
                                 Ok(engine) => {
                                     let shared_waf = Arc::new(SharedWaf::new(engine, "empty".to_string()));
-                                    waf_engines.insert(upstream.name.clone(), shared_waf);
-                                    warn!(upstream = %upstream.name, "Using empty rules as fallback");
+                                    waf_engines.insert(upstream_key.clone(), shared_waf);
+                                    warn!(upstream = %upstream_key, "Using empty rules as fallback");
                                 }
                                 Err(e) => {
                                     error!(error = %e, "Failed to create empty engine");
@@ -150,26 +225,51 @@ impl MyProxy {
             }
         }
 
-        Self { waf_engines, config }
+        Self { 
+            waf_engines, 
+            config,
+            server_name: server_name.to_string(),
+        }
     }
 
-    fn get_upstream_for_host(&self, host: &str) -> Option<&UpstreamConfig> {
-        self.config
-            .upstream
-            .iter()
-            .find(|u| host == u.sni.to_lowercase())
-            .or_else(|| {
-                self.config
-                    .upstream
-                    .iter()
-                    .find(|u| host.contains(&u.sni.to_lowercase()))
-            })
-            .or_else(|| self.config.upstream.iter().find(|u| u.sni == "default"))
-            .or_else(|| self.config.upstream.first())
+    // Метод для получения upstream по хосту
+    // fn get_upstream_for_host(&self, host: &str) -> Option<&UpstreamConfig> {
+    //     let server = self.config.get_server(&self.server_name)?;
+        
+    //     for upstream_key in &server.upstreams {
+    //         if let Some(upstream) = self.config.get_upstream(upstream_key) {
+    //             if host.to_lowercase() == upstream.sni.to_lowercase() {
+    //                 return Some(upstream);
+    //             }
+    //             if host.contains(&upstream.sni.to_lowercase()) {
+    //                 return Some(upstream);
+    //             }
+    //         }
+    //     }
+        
+    //     None
+    // }
+
+    fn get_upstream_key_and_config_for_host(&self, host: &str) -> Option<(&String, &UpstreamConfig)> {
+        let server = self.config.get_server(&self.server_name)?;
+        
+        for upstream_key in &server.upstreams {
+            if let Some(upstream) = self.config.get_upstream(upstream_key) {
+                if host.to_lowercase() == upstream.sni.to_lowercase() {
+                    return Some((upstream_key, upstream));
+                }
+                if host.contains(&upstream.sni.to_lowercase()) {
+                    return Some((upstream_key, upstream));
+                }
+            }
+        }
+        
+        None
     }
 
+    // Остальные методы остаются прежними, но используем новую структуру
     pub fn get_waf_info(&self) -> String {
-        let mut info = String::from("WAF Engines Loaded: ");
+        let mut info = String::from(format!("WAF Engines for server '{}': ", self.server_name));
         let mut first = true;
         
         for (upstream_name, waf) in &self.waf_engines {
@@ -249,6 +349,7 @@ impl Clone for MyProxy {
         Self {
             waf_engines,
             config: self.config.clone(),
+            server_name: self.server_name.clone(),
         }
     }
 }
@@ -264,7 +365,7 @@ impl ProxyHttp for MyProxy {
     async fn upstream_peer(
         &self,
         session: &mut Session,
-        ctx: &mut Self::CTX, // Добавляем ctx здесь
+        ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
         let host_header = session
             .req_header()
@@ -274,27 +375,30 @@ impl ProxyHttp for MyProxy {
             .unwrap_or("")
             .to_lowercase();
 
-        // Если контекст уже создан, обновляем upstream_name
+        // В upstream_peer использовать новый метод:
+        let (upstream_key, upstream) = self.get_upstream_key_and_config_for_host(&host_header)
+            .expect("No upstream configured for this host");
+
         if let Some(ctx) = ctx {
-            if let Some(upstream) = self.get_upstream_for_host(&host_header) {
-                ctx.upstream_name = Some(upstream.name.clone());
-            }
+            ctx.upstream_name = Some(upstream_key.clone());
         }
 
-        let upstream = self.get_upstream_for_host(&host_header)
-            .expect("No upstream configured");
-
         debug!(
-            upstream = %upstream.name,
+            server = %self.server_name,
+            upstream = %upstream_key,
             waf_rules = %upstream.waf_rules,
             "Routing request"
         );
 
+        let backend_addr = upstream.addrs.first()
+            .expect("No backend addresses configured");
+            
         let peer = HttpPeer::new(
-            upstream.address.clone(),
+            backend_addr.clone(),
             upstream.use_tls,
             upstream.sni.clone(),
         );
+        
         Ok(Box::new(peer))
     }
 
@@ -333,21 +437,22 @@ impl ProxyHttp for MyProxy {
             .unwrap_or("unknown")
             .to_lowercase();
 
-        let upstream = match self.get_upstream_for_host(&host_header) {
-            Some(upstream) => upstream,
+        let (upstream_key, upstream) = match self.get_upstream_key_and_config_for_host(&host_header) {
+            Some((key, upstream)) => (key, upstream),
             None => {
                 warn!(host = %host_header, "Unknown upstream for host");
                 session.respond_error(404).await?;
                 return Ok(true);
             }
         };
-        
-        context.upstream_name = Some(upstream.name.clone());
 
-        let waf = match self.waf_engines.get(&upstream.name) {
+        // Сохраняем ключ
+        context.upstream_name = Some(upstream_key.clone());
+
+        let waf = match self.waf_engines.get(upstream_key) {
             Some(waf) => waf,
             None => {
-                error!(upstream = %upstream.name, "No WAF configured for upstream");
+                error!(upstream = %upstream_key, "No WAF configured for upstream");
                 session.respond_error(500).await?;
                 return Ok(true);
             }
@@ -364,7 +469,7 @@ impl ProxyHttp for MyProxy {
         let waf_result = waf.check_detailed(&headers_map, &uri, &method, None);
 
         debug!(
-            upstream = %upstream.name,
+            upstream = %upstream_key,
             method = %method,
             uri = %uri,
             client_ip = %client_ip,
@@ -373,7 +478,7 @@ impl ProxyHttp for MyProxy {
 
         if !waf_result.allowed {
             warn!(
-                upstream = %upstream.name,
+                upstream = %upstream_key,
                 method = %method,
                 uri = %uri,
                 rule_id = %waf_result.rule_id,
@@ -394,7 +499,7 @@ impl ProxyHttp for MyProxy {
         }
 
         debug!(
-            upstream = %upstream.name,
+            upstream = %upstream_key,
             method = %method,
             uri = %uri,
             "Request headers passed WAF check"
@@ -536,47 +641,69 @@ impl ProxyHttp for MyProxy {
 }
 
 pub fn run_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
-    let proxy = MyProxy::from_config();
+    let mut server_threads = vec![];
     
-    info!("WAF proxy starting...");
-    info!("{}", proxy.get_waf_info());
+    // Создаем менеджер прокси
+    let proxy_manager = Arc::new(ProxyManager::new(config.clone()));
     
-    // Start SIGHUP watcher
-    let sighup_proxy = proxy.clone();
+    for (server_name, server_config) in config.get_servers() {
+        let proxy_manager_clone = proxy_manager.clone();
+        let server_name_clone = server_name.clone();
+        let server_config_addr = server_config.addr.clone(); // Клонируем addr
+        
+        let thread = std::thread::spawn(move || {
+            // Получаем прокси из менеджера
+            let proxy = proxy_manager_clone.get_proxy(&server_name_clone)
+                .expect(&format!("Proxy not found for server: {}", server_name_clone));
+            
+            info!("Starting server '{}' on {}", server_name_clone, server_config_addr);
+            info!("{}", proxy.get_waf_info());
+            
+            // Клонируем переменные для внутреннего потока
+            let sighup_proxy = proxy.clone();
+            let server_name_for_sighup = server_name_clone.clone();
+            
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    info!("Starting SIGHUP watcher for server '{}'", server_name_for_sighup);
+                    sighup_proxy.watch_all_sighup().await;
+                });
+            });
+
+            let mut server = pingora::server::Server::new(None).expect("Failed to create server");
+            server.bootstrap();
+
+            let mut proxy_service = pingora::proxy::http_proxy_service(
+                &server.configuration,
+                proxy.as_ref().clone(),
+            );
+
+            proxy_service.add_tcp(&server_config_addr);
+            server.add_service(proxy_service);
+
+            info!(address = %server_config_addr, "Proxy server '{}' started", server_name_clone);
+            server.run_forever();
+        });
+        
+        server_threads.push(thread);
+    }
+
+    let admin_port = config.get_admin_port();
+    
+    // Запускаем admin сервер
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            info!("Starting SIGHUP watcher for all WAF engines");
-            sighup_proxy.watch_all_sighup().await;
+            run_admin_server(admin_port, proxy_manager).await;
         });
     });
 
-    // Start Pingora Proxy
-    let mut server = pingora::server::Server::new(None).expect("Failed to create server");
-    server.bootstrap();
-
-    let mut proxy_service = pingora::proxy::http_proxy_service(
-        &server.configuration,
-        proxy.clone(),
-    );
-
-    let proxy_addr = format!("{}:{}", proxy.config.get_listen_addr(), proxy.config.server.proxy_port);
-    proxy_service.add_tcp(&proxy_addr);
-    server.add_service(proxy_service);
-
-    info!(address = %proxy_addr, "Proxy server started");
-
-    // Start HTTP admin server
-    let admin_proxy = proxy.clone();
-    std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            run_admin_server(admin_proxy, config.get_admin_port()).await;
-        });
-    });
-
-    info!("Proxy server running");
-    server.run_forever();
+    info!("All proxy servers running");
     
-    //Ok(())
+    for thread in server_threads {
+        let _ = thread.join();
+    }
+    
+    Ok(())
 }

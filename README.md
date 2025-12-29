@@ -66,9 +66,26 @@ git clone https://github.com/coreruleset/coreruleset
 
 Reload:
 ```bash
-curl -X POST http://127.0.0.1:8081/reload
+curl -X POST http://127.0.0.1:8081/reload /servers
 # or
 kill -HUP $(pgrep rust-waf-pingora-secrule-reload)
+```
+
+## API
+```bash
+# Get List Servers
+curl http://127.0.0.1:8081/server/
+
+# Get information about a specific server
+curl http://127.0.0.1:8081/server/Server1
+curl http://127.0.0.1:8081/server/Server2
+
+# Other endpoints
+curl http://127.0.0.1:8081/health
+curl http://127.0.0.1:8081/stats
+curl http://127.0.0.1:8081/info
+curl -X POST http://127.0.0.1:8081/reload
+
 ```
 
 ## Testing
@@ -98,4 +115,28 @@ RUST_LOG=debug ./your_proxy
 # или
 RUST_LOG=pingwaf=info,hyper=warn ./your_proxy
 
+```
+
+```toml
+admin_port = 8081
+
+[servers.Server1]
+addr = "0.0.0.0:6188"
+upstreams = ["Upstream1"]
+
+[servers.Server2]
+addr = "0.0.0.0:6189"
+upstreams = ["Upstream2"]
+
+[upstreams.web]
+addrs = ["127.0.0.1:8080"]
+use_tls = false
+sni = "www.example.com"
+waf_rules = "web"
+
+[upstreams.admin]
+addrs = ["127.0.0.2:8888"]
+use_tls = false  
+sni = "admin.example.com"
+waf_rules = "admin"
 ```

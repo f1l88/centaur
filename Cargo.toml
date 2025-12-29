@@ -1,5 +1,5 @@
 [package]
-name = "pingwaf2"
+name = "centaur"
 version = "0.1.0"
 edition = "2021"
 authors = ["alexey.filatov.1988@google.com>"]
