@@ -123,11 +123,11 @@ admin_port = 8081
 
 [servers.Server1]
 addr = "0.0.0.0:6188"
-upstreams = ["Upstream1"]
+upstreams = ["web", "api"]
 
 [servers.Server2]
 addr = "0.0.0.0:6189"
-upstreams = ["Upstream2"]
+upstreams = ["admin"]
 
 [upstreams.web]
 addrs = ["127.0.0.1:8080"]
@@ -135,9 +135,21 @@ use_tls = false
 sni = "www.example.com"
 waf_rules = "web"
 
+[upstreams.api]
+addrs = ["127.0.0.1:8080"]
+use_tls = false
+sni = "api.example.com"
+waf_rules = "api"
+
 [upstreams.admin]
 addrs = ["127.0.0.2:8888"]
 use_tls = false  
 sni = "admin.example.com"
 waf_rules = "admin"
+
+# Опциональная секция для настройки tracing
+[tracing]
+level = "debug"  # или "trace", "info", "warn", "error"
+output = "both"  # "console", "json", "both"
+enable_ansi = true
 ```
