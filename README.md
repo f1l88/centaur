@@ -117,6 +117,7 @@ RUST_LOG=pingwaf=info,hyper=warn ./your_proxy
 
 ```
 
+## Example config
 ```toml
 admin_port = 8081
 
