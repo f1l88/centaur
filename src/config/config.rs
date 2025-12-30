@@ -1,14 +1,14 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(PartialEq, Debug, Deserialize, Clone)]
 pub struct TracingConfig {
     pub level: String,
     pub output: String, // "console", "json", "both"
     pub enable_ansi: bool,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(PartialEq, Debug, Deserialize, Clone)]
 pub struct Config {
     pub admin_port: u16,
     pub servers: HashMap<String, ServerConfig>,
@@ -16,7 +16,7 @@ pub struct Config {
     pub tracing: Option<TracingConfig>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(PartialEq, Debug, Deserialize, Clone)]
 pub struct ServerConfig {
     pub listen_addr: Option<String>,
     pub max_body_size: Option<usize>,
@@ -24,7 +24,7 @@ pub struct ServerConfig {
     pub upstreams: Vec<String>,  // Список имен upstream
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(PartialEq, Debug, Deserialize, Clone)]
 pub struct UpstreamConfig {
     pub addrs: Vec<String>,
     pub use_tls: bool,
@@ -32,15 +32,15 @@ pub struct UpstreamConfig {
     pub waf_rules: String,
 }
 
-impl UpstreamConfig {
-    // Или если нет поля name, использовать SNI
-    pub fn get_identifier(&self) -> &str {
-        &self.sni
-    }
-}
+// impl UpstreamConfig {
+//     // Или если нет поля name, использовать SNI
+//     pub fn get_identifier(&self) -> &str {
+//         &self.sni
+//     }
+// }
 
 impl Config {
-    pub fn load() -> Self {
+    pub fn load() -> Config {
         let config_path = format!("{}/config.toml", env!("CARGO_MANIFEST_DIR"));
         let config_str = std::fs::read_to_string(&config_path)
             .expect("Failed to read config.toml");

@@ -12,9 +12,10 @@ use crate::waf::reloader::SharedWaf;
 use crate::waf::Engine;
 use crate::config::config::{Config, UpstreamConfig};
 use crate::web::api::run_admin_server;
+use crate::proxy::body_inspector::BodyInspector;
+use crate::proxy::proxy_manager::ProxyManager;
 
 use bytes::Bytes;
-use parking_lot::Mutex;
 use chrono::Utc;
 
 use tracing::{debug, error, info, warn, instrument};
@@ -28,53 +29,6 @@ pub struct WafViolation {
     pub blocked: bool,
     pub timestamp: chrono::DateTime<Utc>,
     pub source: String, // "header" или "body"
-}
-
-// Структура для BodyInspector
-pub struct BodyInspector {
-    pub max_body_size: usize,
-    pub buffer: Arc<Mutex<Vec<u8>>>,
-    pub enabled: bool,
-}
-
-impl BodyInspector {
-    pub fn new(max_body_size: usize, enabled: bool) -> Self {
-        Self {
-            max_body_size,
-            buffer: Arc::new(Mutex::new(Vec::new())),
-            enabled,
-        }
-    }
-
-    pub fn append_chunk(&self, chunk: &Bytes) -> Result<()> {
-        if !self.enabled {
-            return Ok(());
-        }
-
-        let mut buffer = self.buffer.lock();
-
-        if buffer.len() + chunk.len() > self.max_body_size {
-            return Err(pingora::Error::because(
-                pingora::ErrorType::InvalidHTTPHeader,
-                format!(
-                    "Request body exceeds maximum size of {} bytes",
-                    self.max_body_size
-                ),
-                pingora::Error::new(pingora::ErrorType::InvalidHTTPHeader),
-            ));
-        }
-
-        buffer.extend_from_slice(chunk);
-        Ok(())
-    }
-
-    pub fn get_body(&self) -> Vec<u8> {
-        self.buffer.lock().clone()
-    }
-
-    pub fn clear(&self) {
-        self.buffer.lock().clear();
-    }
 }
 
 // Структура для хранения состояния запроса
@@ -97,73 +51,6 @@ impl RequestContext {
         }
     }
 }
-
-pub struct ProxyManager {
-    pub proxies: HashMap<String, Arc<MyProxy>>,
-    pub config: Config,
-}
-
-impl ProxyManager {
-    pub fn new(config: Config) -> Self {
-        let mut proxies = HashMap::new();
-        
-        for server_name in config.get_servers().keys() {
-            let proxy = MyProxy::new_for_server(config.clone(), server_name);
-            proxies.insert(server_name.clone(), Arc::new(proxy));
-        }
-        
-        Self { proxies, config }
-    }
-    
-    pub fn get_proxy(&self, server_name: &str) -> Option<Arc<MyProxy>> {
-        self.proxies.get(server_name).cloned()
-    }
-
-    pub fn get_server_list(&self) -> Vec<String> {
-        self.proxies.keys().cloned().collect()
-    }
-        
-    pub fn reload_all_rules(&self) -> Result<(), String> {
-        let mut errors = Vec::new();
-        
-        for (name, proxy) in &self.proxies {
-            if let Err(e) = proxy.reload_all_rules() {
-                errors.push(format!("Failed to reload rules for {}: {}", name, e));
-            }
-        }
-        
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors.join("; "))
-        }
-    }
-
-    pub fn get_all_rules_info(&self) -> String {
-        let mut info = String::new();
-        for (server_name, proxy) in &self.proxies {
-            info.push_str(&format!("=== Server: {} ===\n", server_name));
-            info.push_str(&proxy.get_all_rules_info());
-            info.push_str("\n");
-        }
-        info
-    }
-
-    // Добавим метод для получения информации о WAF (просто обертка для первого прокси)
-    pub fn get_waf_info(&self) -> String {
-        if let Some((first_name, first_proxy)) = self.proxies.iter().next() {
-            format!("Proxy Manager - First server '{}': {}", first_name, first_proxy.get_waf_info())
-        } else {
-            "No proxies available".to_string()
-        }
-    }
-        
-    pub fn get_server_info(&self, server_name: &str) -> Option<String> {
-        self.proxies.get(server_name)
-        .map(|proxy| proxy.get_waf_info())
-    }
-}
-
 
 pub(crate) struct MyProxy {
     waf_engines: HashMap<String, Arc<SharedWaf>>,
@@ -231,24 +118,6 @@ impl MyProxy {
             server_name: server_name.to_string(),
         }
     }
-
-    // Метод для получения upstream по хосту
-    // fn get_upstream_for_host(&self, host: &str) -> Option<&UpstreamConfig> {
-    //     let server = self.config.get_server(&self.server_name)?;
-        
-    //     for upstream_key in &server.upstreams {
-    //         if let Some(upstream) = self.config.get_upstream(upstream_key) {
-    //             if host.to_lowercase() == upstream.sni.to_lowercase() {
-    //                 return Some(upstream);
-    //             }
-    //             if host.contains(&upstream.sni.to_lowercase()) {
-    //                 return Some(upstream);
-    //             }
-    //         }
-    //     }
-        
-    //     None
-    // }
 
     fn get_upstream_key_and_config_for_host(&self, host: &str) -> Option<(&String, &UpstreamConfig)> {
         let server = self.config.get_server(&self.server_name)?;
@@ -437,7 +306,7 @@ impl ProxyHttp for MyProxy {
             .unwrap_or("unknown")
             .to_lowercase();
 
-        let (upstream_key, upstream) = match self.get_upstream_key_and_config_for_host(&host_header) {
+        let (upstream_key, _upstream) = match self.get_upstream_key_and_config_for_host(&host_header) {
             Some((key, upstream)) => (key, upstream),
             None => {
                 warn!(host = %host_header, "Unknown upstream for host");

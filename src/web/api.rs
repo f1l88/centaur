@@ -3,7 +3,8 @@ use hyper::{Body, Request, Response, Server as HyperServer};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tracing::{info, error};
-use crate::proxy::proxy::ProxyManager;
+use crate::proxy::proxy_manager::ProxyManager;
+//use crate::config::config::Config;
 
 pub async fn run_admin_server(port: u16, proxy_manager: Arc<ProxyManager>) {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -77,6 +78,27 @@ pub async fn run_admin_server(port: u16, proxy_manager: Arc<ProxyManager>) {
                                     .unwrap())
                             }
                         }
+                        // "/server/reload" => {
+                        //     if req.method() == hyper::Method::POST {
+                        //         // Перезагрузка конфигурации из файла
+                        //         let new_config = Config::load();
+                        //         match proxy_manager.reload_config(new_config).await {
+                        //             Ok(_) => Ok(Response::builder()
+                        //                 .status(200)
+                        //                 .body(Body::from("Configuration reloaded successfully"))
+                        //                 .unwrap()),
+                        //             Err(e) => Ok(Response::builder()
+                        //                 .status(500)
+                        //                 .body(Body::from(format!("❌ Config reload failed: {e}")))
+                        //                 .unwrap()),
+                        //         }
+                        //     } else {
+                        //         Ok(Response::builder()
+                        //             .status(405)
+                        //             .body(Body::from("Method not allowed"))
+                        //             .unwrap())
+                        //     }
+                        // }
                         _ => {
                             Ok(Response::builder()
                                 .status(404)
@@ -92,7 +114,7 @@ pub async fn run_admin_server(port: u16, proxy_manager: Arc<ProxyManager>) {
     let server = HyperServer::bind(&addr).serve(make_svc);
 
     info!(address = %addr, "Admin API started");
-    info!("Available endpoints: /reload, /stats, /health, /info, /server/{name}");
+    info!("Available endpoints: /reload, /stats, /health, /info, /server/");
 
     if let Err(e) = server.await {
         error!(error = %e, "Admin server error");
