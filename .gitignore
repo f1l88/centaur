@@ -7,6 +7,9 @@ Cargo.lock
 
 # Conf file
 *.conf
+rules/
+*.data
+*.example
 
 # Logs
 *.log

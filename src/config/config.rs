@@ -14,6 +14,11 @@ pub struct Config {
     pub servers: HashMap<String, ServerConfig>,
     pub upstreams: HashMap<String, UpstreamConfig>,
     pub tracing: Option<TracingConfig>,
+
+    
+    pub upgrade_mode: bool,
+    #[serde(skip)]
+    pub upgrade_sock: String,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Clone)]
@@ -22,6 +27,7 @@ pub struct ServerConfig {
     pub max_body_size: Option<usize>,
     pub addr: String,  // Формат: "IP:port"
     pub upstreams: Vec<String>,  // Список имен upstream
+    pub enabled: bool,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Clone)]
@@ -44,7 +50,22 @@ impl Config {
         let config_path = format!("{}/config.toml", env!("CARGO_MANIFEST_DIR"));
         let config_str = std::fs::read_to_string(&config_path)
             .expect("Failed to read config.toml");
-        toml::from_str(&config_str).expect("Failed to parse config.toml")
+
+        let mut cfg: Config =
+            toml::from_str(&config_str).expect("Failed to parse config.toml");
+
+        cfg.upgrade_mode = false;
+        cfg.upgrade_sock = "/tmp/pingora_upgrade.sock".to_string();
+
+        cfg
+    }
+
+    pub fn enable_upgrade(&mut self) {
+        self.upgrade_mode = true;
+    }
+
+    pub fn is_upgrade(&self) -> bool {
+        self.upgrade_mode
     }
 
     pub fn get_admin_port(&self) -> u16 {

@@ -7,13 +7,15 @@ use pingora::proxy::{ProxyHttp, Session};
 use pingora::upstreams::peer::HttpPeer;
 use pingora::http::HMap;
 use pingora::Result;
+use pingora::server::configuration::Opt;
+
 
 use crate::waf::reloader::SharedWaf;
 use crate::waf::Engine;
 use crate::config::config::{Config, UpstreamConfig};
-use crate::web::api::run_admin_server;
-use crate::proxy::body_inspector::BodyInspector;
-use crate::proxy::proxy_manager::ProxyManager;
+//use crate::web::api::run_admin_server;
+use crate::proxy::inspector::BodyInspector;
+use crate::proxy::manager::ProxyManager;
 
 use bytes::Bytes;
 use chrono::Utc;
@@ -82,7 +84,7 @@ impl MyProxy {
                 Ok(engine) => {
                     let shared_waf = Arc::new(SharedWaf::new(engine, rules_path.clone()));
                     waf_engines.insert(upstream_key.clone(), shared_waf);
-                    info!(upstream = %upstream_key, rules = %upstream.waf_rules, "WAF rules loaded successfully");
+                    debug!(upstream = %upstream_key, rules = %upstream.waf_rules, "WAF rules loaded successfully");
                 }
                 Err(e) => {
                     error!(upstream = %upstream_key, rules = %upstream.waf_rules, error = %e, "Failed to load WAF rules");
@@ -223,6 +225,16 @@ impl Clone for MyProxy {
     }
 }
 
+fn build_pingora_opt_from_config(config: &Config) -> Opt {
+    Opt {
+        upgrade: config.upgrade_mode,  // <- берём из Config
+        daemon: false,                 // можешь тоже брать из config
+        nocapture: false,
+        test: false,
+        conf: None,                     // если хочешь, можно указать путь к config.toml
+    }
+}
+
 #[async_trait::async_trait]
 impl ProxyHttp for MyProxy {
     type CTX = Option<RequestContext>; // ВАЖНО: Изменено на Option<RequestContext>
@@ -347,6 +359,7 @@ impl ProxyHttp for MyProxy {
 
         if !waf_result.allowed {
             warn!(
+                target: "attack",
                 upstream = %upstream_key,
                 method = %method,
                 uri = %uri,
@@ -460,6 +473,7 @@ impl ProxyHttp for MyProxy {
 
                 if !waf_result.allowed {
                     warn!(
+                        target: "attack",
                         upstream = %upstream_name,
                         method = %method,
                         uri = %uri,
@@ -510,69 +524,50 @@ impl ProxyHttp for MyProxy {
 }
 
 pub fn run_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
-    let mut server_threads = vec![];
-    
-    // Создаем менеджер прокси
+    crate::utils::pid::write_pid("/tmp/centaur.pid")?;
+
     let proxy_manager = Arc::new(ProxyManager::new(config.clone()));
-    
-    for (server_name, server_config) in config.get_servers() {
-        let proxy_manager_clone = proxy_manager.clone();
-        let server_name_clone = server_name.clone();
-        let server_config_addr = server_config.addr.clone(); // Клонируем addr
-        
-        let thread = std::thread::spawn(move || {
-            // Получаем прокси из менеджера
-            let proxy = proxy_manager_clone.get_proxy(&server_name_clone)
-                .expect(&format!("Proxy not found for server: {}", server_name_clone));
-            
-            info!("Starting server '{}' on {}", server_name_clone, server_config_addr);
-            info!("{}", proxy.get_waf_info());
-            
-            // Клонируем переменные для внутреннего потока
-            let sighup_proxy = proxy.clone();
-            let server_name_for_sighup = server_name_clone.clone();
-            
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    info!("Starting SIGHUP watcher for server '{}'", server_name_for_sighup);
-                    sighup_proxy.watch_all_sighup().await;
-                });
-            });
 
-            let mut server = pingora::server::Server::new(None).expect("Failed to create server");
-            server.bootstrap();
+    let pingora_opt = build_pingora_opt_from_config(&config);
+    let mut server = pingora::server::Server::new(Some(pingora_opt)).unwrap();
 
-            let mut proxy_service = pingora::proxy::http_proxy_service(
-                &server.configuration,
-                proxy.as_ref().clone(),
-            );
+    let is_upgrade = config.is_upgrade();
 
-            proxy_service.add_tcp(&server_config_addr);
-            server.add_service(proxy_service);
+    server.bootstrap();
 
-            info!(address = %server_config_addr, "Proxy server '{}' started", server_name_clone);
-            server.run_forever();
-        });
-        
-        server_threads.push(thread);
+    for (name, cfg) in config.get_servers() {
+        // 🔥 ВАЖНО: поддержка enabled
+        if !cfg.enabled {
+            tracing::info!("Server {} disabled, skipping", name);
+            continue;
+        }
+
+        let proxy = proxy_manager
+            .get_proxy(&name)
+            .ok_or_else(|| format!("Proxy not found for server: {}", name))?;
+
+        let mut svc =
+            pingora::proxy::http_proxy_service(&server.configuration, proxy.as_ref().clone());
+
+        svc.add_tcp(&cfg.addr);
+        server.add_service(svc);
     }
 
-    let admin_port = config.get_admin_port();
-    
-    // Запускаем admin сервер
-    std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            run_admin_server(admin_port, proxy_manager).await;
-        });
-    });
-
-    info!("All proxy servers running");
-    
-    for thread in server_threads {
-        let _ = thread.join();
+    // ✅ Admin API запускаем ТОЛЬКО если не upgrade 
+    if !is_upgrade { 
+        let admin_port = config.get_admin_port(); 
+        info!("Spawning Admin API process on {}", admin_port); 
+        let mut cmd = std::process::Command::new(std::env::current_exe().unwrap()); 
+        cmd.arg("run-admin") 
+            .arg("--port") 
+            .arg(admin_port.to_string()); 
+        cmd.spawn().expect("Failed to spawn admin API process"); 
+    } else { 
+        info!("Admin API disabled (upgrade mode)"); 
     }
-    
-    Ok(())
+
+    tracing::info!("Pingora running...");
+    server.run_forever();
 }
+
+

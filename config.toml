@@ -1,12 +1,22 @@
 admin_port = 8081
 
+upgrade_sock = "/tmp/pingora_upgrade.sock"
+upgrade_mode = true
+
 [servers.Server1]
-addr = "0.0.0.0:6188"
+addr = "0.0.0.0:6190"
 upstreams = ["web", "api"]
+enabled = true
 
 [servers.Server2]
-addr = "0.0.0.0:6189"
+addr = "0.0.0.0:6191"
 upstreams = ["admin"]
+enabled = true
+
+[servers.Server3]
+addr = "0.0.0.0:6193"
+upstreams = ["test"]
+enabled = false
 
 [upstreams.web]
 addrs = ["127.0.0.1:8080"]
@@ -21,13 +31,19 @@ sni = "api.example.com"
 waf_rules = "api"
 
 [upstreams.admin]
-addrs = ["127.0.0.2:8888"]
+addrs = ["127.0.0.1:8888"]
 use_tls = false  
 sni = "admin.example.com"
 waf_rules = "admin"
 
+[upstreams.test]
+addrs = ["127.0.0.1:8181"]
+use_tls = false  
+sni = "test.example.com"
+waf_rules = "admin"
+
 # Опциональная секция для настройки tracing
 [tracing]
-level = "debug"  # или "trace", "info", "warn", "error"
-output = "both"  # "console", "json", "both"
+level = "info"  # или "trace", "info", "warn", "error", "debug"
+output = "file"  # "console", "json", "both"
 enable_ansi = true

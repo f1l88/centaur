@@ -85,6 +85,8 @@ curl http://127.0.0.1:8081/health
 curl http://127.0.0.1:8081/stats
 curl http://127.0.0.1:8081/info
 curl -X POST http://127.0.0.1:8081/reload
+curl -X POST http://127.0.0.1:8081/upgrade # update pingora proxy
+
 
 ```
 

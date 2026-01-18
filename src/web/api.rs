@@ -1,122 +1,114 @@
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response, Server as HyperServer};
-use std::net::SocketAddr;
 use std::sync::Arc;
-use tracing::{info, error};
-use crate::proxy::proxy_manager::ProxyManager;
-//use crate::config::config::Config;
 
-pub async fn run_admin_server(port: u16, proxy_manager: Arc<ProxyManager>) {
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    
-    let make_svc = make_service_fn(move |_conn| {
-        let proxy_manager = proxy_manager.clone();
-        async move {
-            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
-                let proxy_manager = proxy_manager.clone();
-                async move {
-                    match req.uri().path() {
-                        "/reload" => {
-                            match proxy_manager.reload_all_rules() {
-                                Ok(_) => Ok::<_, hyper::Error>(
-                                    Response::builder()
-                                        .status(200)
-                                        .body(Body::from("All WAF rules reloaded successfully"))
-                                        .unwrap(),
-                                ),
-                                Err(e) => Ok(Response::builder()
-                                    .status(500)
-                                    .body(Body::from(format!("❌ Reload failed: {e}")))
-                                    .unwrap()),
-                            }
-                        }
-                        "/stats" => {
-                            let rules_info = proxy_manager.get_all_rules_info();
-                            Ok::<_, hyper::Error>(
-                                Response::builder()
-                                    .status(200)
-                                    .body(Body::from(rules_info))
-                                    .unwrap(),
-                            )
-                        }
-                        "/health" => {
-                            Ok::<_, hyper::Error>(
-                                Response::builder()
-                                    .status(200)
-                                    .body(Body::from("WAF proxy is healthy"))
-                                    .unwrap(),
-                            )
-                        }
-                        "/info" => {
-                            let info = proxy_manager.get_waf_info();
-                            Ok::<_, hyper::Error>(
-                                Response::builder()
-                                    .status(200)
-                                    .body(Body::from(info))
-                                    .unwrap(),
-                            )
-                        }
-                        path if path.starts_with("/server/") => {
-                            let server_name = path.strip_prefix("/server/").unwrap_or("");
-                            if server_name.is_empty() {
-                                // Список всех серверов при запросе /server
-                                let servers = proxy_manager.get_server_list();
-                                let response = servers.join("\n");
-                                Ok(Response::builder()
-                                    .status(200)
-                                    .body(Body::from(response))
-                                    .unwrap())
-                            } else if let Some(info) = proxy_manager.get_server_info(server_name) {
-                                Ok(Response::builder()
-                                    .status(200)
-                                    .body(Body::from(info))
-                                    .unwrap())
-                            } else {
-                                Ok(Response::builder()
-                                    .status(404)
-                                    .body(Body::from(format!("Server '{}' not found", server_name)))
-                                    .unwrap())
-                            }
-                        }
-                        // "/server/reload" => {
-                        //     if req.method() == hyper::Method::POST {
-                        //         // Перезагрузка конфигурации из файла
-                        //         let new_config = Config::load();
-                        //         match proxy_manager.reload_config(new_config).await {
-                        //             Ok(_) => Ok(Response::builder()
-                        //                 .status(200)
-                        //                 .body(Body::from("Configuration reloaded successfully"))
-                        //                 .unwrap()),
-                        //             Err(e) => Ok(Response::builder()
-                        //                 .status(500)
-                        //                 .body(Body::from(format!("❌ Config reload failed: {e}")))
-                        //                 .unwrap()),
-                        //         }
-                        //     } else {
-                        //         Ok(Response::builder()
-                        //             .status(405)
-                        //             .body(Body::from("Method not allowed"))
-                        //             .unwrap())
-                        //     }
-                        // }
-                        _ => {
-                            Ok(Response::builder()
-                                .status(404)
-                                .body(Body::from("❌ Endpoint not found. Available: /reload, /stats, /health, /info, /server/{name}"))
-                                .unwrap())
-                        }
-                    }
-                }
-            }))
-        }
-    });
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
+    Router,
+};
+use tracing::info;
 
-    let server = HyperServer::bind(&addr).serve(make_svc);
+use crate::proxy::manager::ProxyManager;
+use crate::web::ui::ui_router;
 
-    info!(address = %addr, "Admin API started");
-    info!("Available endpoints: /reload, /stats, /health, /info, /server/");
 
-    if let Err(e) = server.await {
-        error!(error = %e, "Admin server error");
+/// ====== App State ======
+#[derive(Clone)]
+struct AdminState {
+    proxy_manager: Arc<ProxyManager>,
+}
+
+/// ====== Handlers ======
+
+async fn health() -> &'static str {
+    "WAF proxy is healthy"
+}
+
+async fn reload(State(state): State<AdminState>) -> impl IntoResponse {
+    match state.proxy_manager.reload_all_rules() {
+        Ok(_) => (StatusCode::OK, "All WAF rules reloaded successfully"),
+        Err(_e) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to reload WAF rules"),
     }
 }
+
+async fn reload_server(State(state): State<AdminState>) -> impl IntoResponse {
+    match state.proxy_manager.reload() {
+        Ok(_) => (StatusCode::OK, "Server reloaded successfully"),
+        Err(_e) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to reload server"),
+    }
+}
+
+async fn stats(State(state): State<AdminState>) -> impl IntoResponse {
+    let info = state.proxy_manager.get_all_rules_info();
+    (StatusCode::OK, info)
+}
+
+async fn info_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let info = state.proxy_manager.get_waf_info();
+    (StatusCode::OK, info)
+}
+
+async fn list_servers(State(state): State<AdminState>) -> impl IntoResponse {
+    let servers = state.proxy_manager.get_server_list();
+    (StatusCode::OK, servers.join("\n"))
+}
+
+async fn server_info(
+    Path(server_name): Path<String>,
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    match state.proxy_manager.get_server_info(&server_name) {
+        Some(info) => (StatusCode::OK, info),
+        None => (
+            StatusCode::NOT_FOUND,
+            format!("Server '{}' not found", server_name),
+        ),
+    }
+}
+
+async fn upgrade(State(state): State<AdminState>) -> impl IntoResponse {
+    match state.proxy_manager.upgrade_master().await {
+        Ok(_) => (StatusCode::ACCEPTED, "Upgrade started"),
+        Err(_e) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to start upgrade"),
+    }
+}
+
+/// ====== Server bootstrap ======
+
+pub async fn run_admin_server(port: u16, proxy_manager: Arc<ProxyManager>) {
+    let state = AdminState { proxy_manager };
+
+    // ===== API =====
+    let api = Router::new()
+        .route("/health", get(health))
+        .route("/reload", post(reload))
+        .route("/reloadserver", post(reload_server))
+        .route("/stats", get(stats))
+        .route("/info", get(info_handler))
+        .route("/server", get(list_servers))
+        .route("/server/{name}", get(server_info))
+        .route("/upgrade", post(upgrade))
+        .with_state(state.clone());
+
+    // ===== UI =====
+    let ui = ui_router(); // <- твой UI
+
+    // ===== APP =====
+    let app = Router::new()
+        .merge(api)
+        .nest("/admin", ui);
+
+    let addr = format!("127.0.0.1:{port}");
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .expect("Failed to bind admin port");
+
+    info!("Admin API started at http://{addr}");
+    info!("Admin UI  started at http://{addr}/admin");
+
+    axum::serve(listener, app)
+        .await
+        .expect("Admin server failed");
+}
+
