@@ -13,10 +13,10 @@ addr = "0.0.0.0:6191"
 upstreams = ["admin"]
 enabled = true
 
-[servers.Server3]
-addr = "0.0.0.0:6193"
-upstreams = ["test"]
-enabled = false
+# [servers.Server3]
+# addr = "0.0.0.0:6193"
+# upstreams = ["test"]
+# enabled = false
 
 [upstreams.web]
 addrs = ["127.0.0.1:8080"]

@@ -30,7 +30,7 @@ pub fn init_tracing(
     if let Some(cfg) = config {
         match cfg.output.as_str() {
             "file" | "both" => {
-                let date = Local::now().format("%Y-%m-%d");
+                //let date = Local::now().format("%Y-%m-%d");
 
                 // =========================
                 // Основной лог (всё, кроме атак)
@@ -38,7 +38,8 @@ pub fn init_tracing(
                 let proxy_file = OpenOptions::new()
                     .create(true)
                     .append(true)
-                    .open(format!("logs/proxy_{}.log", date))
+                    // .open(format!("logs/proxy_{}.log", date))
+                    .open(format!("logs/proxy.log"))
                     .expect("Failed to open proxy log");
 
                 let (proxy_writer, proxy_guard) = NonBlocking::new(proxy_file);
@@ -59,7 +60,7 @@ pub fn init_tracing(
                 let attack_file = OpenOptions::new()
                     .create(true)
                     .append(true)
-                    .open(format!("logs/attacks_{}.log", date))
+                    .open(format!("logs/attacks.log"))
                     .expect("Failed to open attack log");
 
                 let (attack_writer, attack_guard) = NonBlocking::new(attack_file);

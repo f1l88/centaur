@@ -61,7 +61,9 @@ impl ProxyManager {
             Command::new(std::env::current_exe()
                 .map_err(|e| e.to_string())?)
                 .arg("run")
-                .arg("--upgrade") 
+                .arg("--upgrade")
+                .arg("--conf")
+                .arg("./config.toml")
                 .spawn() 
                 .map_err(|e| format!("Failed to spawn upgrade process: {e}"))?;
             Ok::<_, String>(())
@@ -106,7 +108,6 @@ impl ProxyManager {
             server.add_service(svc);
         }
     }
-
 
     pub async fn upgrade_master_async(&self) -> Result<(), String> {
         info!("Starting async hot upgrade");
@@ -166,7 +167,6 @@ impl ProxyManager {
         Ok(())
     }
 
-    
     pub fn get_proxy(&self, server_name: &str) -> Option<Arc<MyProxy>> {
         self.proxies.read().unwrap().get(server_name).cloned()
     }

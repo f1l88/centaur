@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::fs;
 
 use axum::{
     extract::{Path, State},
@@ -74,6 +75,17 @@ async fn upgrade(State(state): State<AdminState>) -> impl IntoResponse {
     }
 }
 
+async fn logs(State(state): State<AdminState>) -> impl IntoResponse {
+        // Путь к файлу логов
+    let path = "./logs/attacks.log"; // или укажи свой путь
+
+    // Читаем содержимое файла
+    let content = fs::read_to_string(path)
+        .unwrap_or_else(|_| "Cannot read log file".to_string());    
+    
+    (StatusCode::OK, content)
+}
+
 /// ====== Server bootstrap ======
 
 pub async fn run_admin_server(port: u16, proxy_manager: Arc<ProxyManager>) {
@@ -89,6 +101,7 @@ pub async fn run_admin_server(port: u16, proxy_manager: Arc<ProxyManager>) {
         .route("/server", get(list_servers))
         .route("/server/{name}", get(server_info))
         .route("/upgrade", post(upgrade))
+        .route("/logs", get(logs)) 
         .with_state(state.clone());
 
     // ===== UI =====

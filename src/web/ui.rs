@@ -5,7 +5,9 @@ use axum::{
 };
 
 pub fn ui_router() -> Router {
-    Router::new().route("/", get(index))
+    Router::new()
+    .route("/", get(index))
+    //.route("/logs", get(logs))
 }
 
 async fn index() -> Html<&'static str> {
@@ -31,6 +33,7 @@ async fn index() -> Html<&'static str> {
     <button onclick="getCall('/health')">Health</button>
     <button onclick="getCall('/stats')">Stats</button>
     <button onclick="getCall('/info')">Info</button>
+    <button onclick="getCall('/logs')">Attack Logs</button>
   </div>
 
   <h3>Servers</h3>
@@ -57,7 +60,7 @@ async function getCall(path) {
   try {
     const res = await fetch(path);
     const text = await res.text();
-    document.getElementById('out').innerText = `[GET ${path}] ${text}`;
+    document.getElementById('out').innerText = `[GET ${path}]\n${text}`;
   } catch(e) {
     document.getElementById('out').innerText = `Error: ${e}`;
   }
@@ -94,7 +97,6 @@ async function loadServerInfo() {
   }
 }
 
-// Подгружаем список серверов при открытии страницы
 window.onload = loadServers;
 </script>
 </body>

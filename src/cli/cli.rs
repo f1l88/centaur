@@ -22,6 +22,9 @@ pub enum Commands {
         /// Start in upgrade mode (wait for upgrade socket)
         #[arg(long)]
         upgrade: bool,
+
+        #[arg(long, default_value = "./config.toml")]
+        conf: String,
     },
     RunAdmin { #[arg(long)] port: u16 },
     /// Check WAF rules
@@ -43,7 +46,7 @@ impl Cli {
 
     pub fn execute(&self, mut config: Config) -> Result<(), Box<dyn std::error::Error>> {
         match &self.command {
-            Some(Commands::Run { upgrade }) => {
+            Some(Commands::Run { upgrade, conf }) => {
             // Создаем mutable config
             if *upgrade {
                 // CLI-флаг --upgrade имеет приоритет
