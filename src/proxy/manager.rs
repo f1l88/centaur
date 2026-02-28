@@ -7,6 +7,7 @@ use std::thread::sleep;
 
 use pingora::Result;
 
+use crate::config;
 use crate::config::config::Config;
 use crate::proxy::proxy::MyProxy;
 
@@ -87,7 +88,6 @@ impl ProxyManager {
         Ok(())
     }
 
-    
     pub fn apply_enabled_servers(
         &self,
         server: &mut pingora::server::Server,
@@ -214,4 +214,23 @@ impl ProxyManager {
         self.proxies.read().unwrap().get(server_name)
             .map(|proxy| proxy.get_waf_info())
     }
+
+    pub fn get_server_config_info(&self) -> String {
+        let config = self.config.read().unwrap();
+
+        if config.servers.is_empty() {
+            return "No servers configured".to_string();
+        }
+
+        // Создаём вектор строк для каждого сервера
+        let mut output = vec![];
+        for (name, server) in &config.servers {
+            // Используем Debug для вывода всех полей
+            output.push(format!("Server '{}': {:?}", name, server));
+        }
+
+        // Объединяем все строки через перенос строки
+        output.join("\n")
+    }
+    
 }

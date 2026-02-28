@@ -14,8 +14,6 @@ pub struct Config {
     pub servers: HashMap<String, ServerConfig>,
     pub upstreams: HashMap<String, UpstreamConfig>,
     pub tracing: Option<TracingConfig>,
-
-    
     pub upgrade_mode: bool,
     #[serde(skip)]
     pub upgrade_sock: String,

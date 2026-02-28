@@ -7,7 +7,6 @@ use axum::{
 pub fn ui_router() -> Router {
     Router::new()
     .route("/", get(index))
-    //.route("/logs", get(logs))
 }
 
 async fn index() -> Html<&'static str> {

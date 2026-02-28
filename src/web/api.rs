@@ -46,7 +46,7 @@ async fn stats(State(state): State<AdminState>) -> impl IntoResponse {
 }
 
 async fn info_handler(State(state): State<AdminState>) -> impl IntoResponse {
-    let info = state.proxy_manager.get_waf_info();
+    let info = state.proxy_manager.get_server_config_info();
     (StatusCode::OK, info)
 }
 
@@ -56,6 +56,19 @@ async fn list_servers(State(state): State<AdminState>) -> impl IntoResponse {
 }
 
 async fn server_info(
+    Path(server_name): Path<String>,
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    match state.proxy_manager.get_server_info(&server_name) {
+        Some(info) => (StatusCode::OK, info),
+        None => (
+            StatusCode::NOT_FOUND,
+            format!("Server '{}' not found", server_name),
+        ),
+    }
+}
+
+async fn server_config_info(
     Path(server_name): Path<String>,
     State(state): State<AdminState>,
 ) -> impl IntoResponse {
