@@ -8,6 +8,12 @@ addr = "0.0.0.0:6190"
 upstreams = ["web", "api"]
 enabled = true
 
+# Rate limit для сервера (опционально)
+[servers.Server1.rate_limit]
+enabled = true
+window_seconds = 60
+max_requests = 100
+
 [servers.Server2]
 addr = "0.0.0.0:6191"
 upstreams = ["admin"]
@@ -29,6 +35,12 @@ addrs = ["127.0.0.1:8080"]
 use_tls = false
 sni = "api.example.com"
 waf_rules = "api"
+
+# Rate limit для upstream api
+[upstreams.api.rate_limit]
+enabled = true
+window_seconds = 60
+max_requests = 25
 
 [upstreams.admin]
 addrs = ["127.0.0.1:8888"]

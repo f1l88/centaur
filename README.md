@@ -109,6 +109,7 @@ sudo apt install wrk  # Ubuntu/Debian
 
 # Базовый тест
 wrk -t12 -c100 -d30s -H "Host: admin.example.com" -H "User-Agent: masscan" "http://127.0.0.1:6188/"
+wrk -t2 -c10 -d30s -H "Host: api.example.com" http://localhost:6190/
 ```
 
 ## Logging 

@@ -13,10 +13,35 @@ pub struct Config {
     pub admin_port: u16,
     pub servers: HashMap<String, ServerConfig>,
     pub upstreams: HashMap<String, UpstreamConfig>,
+    pub rate_limit: Option<RateLimitConfig>,
     pub tracing: Option<TracingConfig>,
     pub upgrade_mode: bool,
     #[serde(skip)]
     pub upgrade_sock: String,
+}
+
+#[derive(PartialEq, Debug, Clone, Deserialize, Default)]
+pub struct ConnectionLimitConfig {
+    pub enabled: bool,
+    pub max_connections: usize,
+    pub max_requests: usize,
+}
+
+#[derive(PartialEq, Debug, Clone, Deserialize)]
+pub struct RateLimitConfig {
+    pub enabled: bool,
+    pub window_seconds: u64,
+    pub max_requests: usize,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            window_seconds: 60,
+            max_requests: 100,
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Deserialize, Clone)]
@@ -26,6 +51,10 @@ pub struct ServerConfig {
     pub addr: String,  // Формат: "IP:port"
     pub upstreams: Vec<String>,  // Список имен upstream
     pub enabled: bool,
+    #[serde(default)]
+    pub rate_limit: Option<RateLimitConfig>,
+    #[serde(default)]
+    pub connection_limit: Option<ConnectionLimitConfig>,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Clone)]
@@ -34,6 +63,10 @@ pub struct UpstreamConfig {
     pub use_tls: bool,
     pub sni: String,
     pub waf_rules: String,
+    #[serde(default)]
+    pub rate_limit: Option<RateLimitConfig>,
+    #[serde(default)]
+    pub connection_limit: Option<ConnectionLimitConfig>,
 }
 
 // impl UpstreamConfig {

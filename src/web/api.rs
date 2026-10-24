@@ -21,7 +21,6 @@ struct AdminState {
 }
 
 /// ====== Handlers ======
-
 async fn health() -> &'static str {
     "WAF proxy is healthy"
 }
@@ -100,7 +99,6 @@ async fn logs(State(state): State<AdminState>) -> impl IntoResponse {
 }
 
 /// ====== Server bootstrap ======
-
 pub async fn run_admin_server(port: u16, proxy_manager: Arc<ProxyManager>) {
     let state = AdminState { proxy_manager };
 
